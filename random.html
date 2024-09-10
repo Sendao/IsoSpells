@@ -1,0 +1,1451 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+
+<head splash>
+	<title>Radiant Demo</title>
+	<link rel=stylesheet href='/css/styles.css'>
+	</link>
+</head>
+
+<script src='/js/lib.js' type='text/javascript'></script>
+<script src='/js/libtoo.js' type='text/javascript'></script>
+<script src='/js/vst.js' type='text/javascript'></script>
+<script src='/js/rad.js' type='text/javascript'></script>
+
+<body style='background: black; color: tan'>
+
+	<div id=splashpage style='min-height: 100%; min-width: 100%; padding: 0px; margin: 0px; background: white; z-index: 200; position: fixed; left: 0px; top: 0px;'>
+		<div id=splashpage2 style='margin: 0px auto; height: 100px; width: 200px; padding: 10px; margin-top: 100px; background: black; color: green; font-size: 18pt'>
+			<div id=splashlabel style='margin: 0px auto; padding: 5px; max-width: 150px; text-align: center; border: 1px solid green; background: black; color: tan'>
+				Loading
+			</div>
+		</div>
+	</div>
+
+	<!--  setup
+<loadwheel></loadwheel>
+-->
+
+	<!--  main view screen on -->
+	<div xSect=main id=mainscroll class="margin-small">
+
+		<canvas id=maincanvas style='position: absolute; top: 0; left: 0; z-index: 1'></canvas>
+
+	</div>
+
+	#include tpl/radlib.html
+	#include tpl/backend.html
+	#include tpl/struct.html
+
+<templates>
+<div xTemplate='circle_controls'>
+	<div xWatch='config' class='notextwatch' unselectable="on" onselectstart="return false;" style='float: left'>
+
+		<div xWatch=menu_reset>
+		<div xPostdraw='console.info'></div>
+		<menu ></menu>
+		</div>
+	</div>
+</div>
+</templates>
+</body>
+
+</html>
+<script language=javascript>
+	var canvas, ctx, img;
+	var gravity = [];
+	var circles = [];
+	var first_config_load = true;
+	var colors = [ [ 1, .5, .5 ], [ 0, 1, 0 ] , [ .3, .3, 1 ], [ 0, 1, 1 ], [ 1, 0, 1 ], [1, 1, 0],
+				[ .33, .33, .77 ], [ .33, .77, .33 ], [ .77, .33, .33 ] ];
+	var fades = [ 0.1, 0.5, 0.99, 1.0, 1.1, 1.5, 2.0 ];
+	var cfg = { setup: false };
+	var winds = {
+		'n': [ 0, -1 ],
+		's': [ 0, 1 ],
+		'e': [ 1, 0 ],
+		'w': [ -1, 0 ],
+		'ne': [ 1, -1 ],
+		'se': [ 1, 1 ],
+		'nw': [ -1, -1 ],
+		'sw': [ -1, 1 ]
+	};
+	var modes = {
+		'start': {
+			max_vel: 10,
+			min_vel: 4,
+			gravdist: 2.4,
+			circles: 12,
+			gravTime: 1,
+			safe_colors: true,
+			color_fade: 1.0,
+			color_speed: 16.0,
+			max_color: 249,
+			circle_max_color: 1.0,
+			grav_max_color: 250.0,
+			size_min: 34.0,
+			size_range: 72.0,
+			loop_edges: true,
+			bounce_edges: false,
+			scroll_edges: false,
+			grav_speed: 0.00001,
+			autoblur: false,
+			manublur: false,
+			chrome: false,
+			fade_left: 0.96,
+			fade_right: 1.0,
+			gravMult: 0.22,
+			spikes: true,
+			sampling: true,
+			splatter: false,
+			blurwind: false,
+		},
+			'origin': {
+				max_vel: 10,
+				min_vel: 4,
+				gravdist: 1.5,
+				circles: 22,
+				gravTime: 1,
+				safe_colors: true,
+				color_fade: 0.95,
+				color_speed: 7.0,
+				max_color: 249,
+				circle_max_color: 1.0,
+				grav_max_color: 250.0,
+				size_min: 22.0,
+				size_range: 22.0,
+				loop_edges: true,
+				bounce_edges: false,
+				scroll_edges: false,
+				grav_speed: 0.000005,
+				autoblur: false,
+				manublur: false,
+				chrome: false,
+//				fade_left: 0.99,
+//				fade_right: 0.5,
+				gravMult: 0.55,
+				spikes: true,
+				sampling: true,
+				splatter: false
+			},
+				'lights': {
+					max_vel: 10,
+					min_vel: 4,
+					gravdist: 1.5,
+					circles: 13,
+					gravTime: 1,
+					safe_colors: true,
+					color_fade: 0.99,
+					color_speed: 12.0,
+					max_color: 249,
+					circle_max_color: 1.0,
+					grav_max_color: 250.0,
+					size_min: 11.0,
+					size_range: 22.0,
+					loop_edges: true,
+					bounce_edges: false,
+					scroll_edges: true,
+					grav_speed: 0.00002,
+					autoblur: false,
+					manublur: false,
+					chrome: false,
+//					fade_left: 0.99,
+//					fade_right: 1.0,
+					gravMult: 0.44,
+					spikes: false,
+					sampling: true,
+					splatter: false
+				},
+		'lovers': {
+			manublur: 1,
+			color_speed: 4.0,
+			circles: 2,
+				max_vel: 15,
+				min_vel: 5,
+				gravdist: 1.5,
+				gravTime: 100,
+				color_speed: 16,
+				safe_colors: true,
+				color_fade: 1.0,
+				size_min: 33.0,
+				size_range: 33.0,
+				grav_speed: 0.00005,
+				autoblur: false,
+				chrome: false,
+				gravMult: 0.33
+		},
+			'globalls': {
+				max_vel: 20,
+				min_vel: 20,
+				gravdist: 1.2,
+				circles: 33,
+				gravTime: 1,
+				safe_colors: true,
+				color_fade: 0.99,
+				color_speed: 7,
+				size_min: 16.0,
+				size_range: 4.0,
+				loop_edges: false,
+				bounce_edges: false,
+				scroll_edges: true,
+				grav_speed: 0.001,
+				autoblur: false,
+				manublur: 2,
+				chrome: false,
+				gravMult: 2.0,
+				spikes: true
+			},
+				'glowballs': {
+					max_vel: 20,
+					min_vel: 10,
+					gravdist: 1.0,
+					circles: 11,
+					safe_colors: true,
+					color_fade: 0.8,
+					color_speed: 17,
+					size_min: 11.0,
+					size_range: 22.0,
+					grav_speed: 0.00005,
+					autoblur: true,
+					manublur: false,
+					chrome: false,
+					color_fade: 0.5,
+					gravMult: 0.33
+				},
+				'colorain': {
+					max_vel: 20,
+					min_vel: 20,
+					gravdist: 4.0,
+					circles: 11,
+					gravTime: 1,
+					safe_colors: true,
+					color_fade: 0.99,
+					color_speed: 21.0,
+					grav_max_color: 200.0,
+					size_min: 16.0,
+					size_range: 4.0,
+					loop_edges: false,
+					bounce_edges: false,
+					scroll_edges: true,
+					grav_speed: 0.00001,
+					autoblur: false,
+					manublur: false,
+					chrome: false,
+					gravMult: 0.99,
+					spikes: true
+				},
+			'excite': {
+				max_vel: 20,
+				min_vel: 10,
+				gravdist: 1,
+				circles: 22,
+				gravTime: 10,
+				safe_colors: true,
+				color_fade: 0.99,
+				color_speed: 17,
+				grav_max_color: 150.0,
+				size_min: 17.0,
+				size_range: 8.0,
+				grav_speed: 0.00005,
+				autoblur: false,
+				manublur: false,
+				chrome: false,
+				gravMult: 0.22
+			},
+		'speedy': {
+			max_vel: 20,
+			min_vel: 10,
+			gravdist: 1.0,
+			circles: 4,
+			safe_colors: true,
+			color_fade: 1.0,
+			color_speed: 17,
+			size_min: 11.0,
+			size_range: 22.0,
+			grav_speed: 0.00002,
+			autoblur: true,
+			manublur: false,
+			chrome: false,
+			splatter: false,
+			color_fade: 1.0,
+		},
+	'smashing': {
+		max_vel: 20,
+		min_vel: 10,
+		gravdist: 1.0,
+		circles: 11,
+		safe_colors: true,
+		color_fade: 1.0,
+		color_speed: 30,
+		size_min: 11.0,
+		size_range: 22.0,
+		grav_speed: 0.00005,
+		autoblur: true,
+		manublur: false,
+		chrome: false,
+		color_fade: 0.5,
+		gravMult: 0.33
+	},
+		'phone': {
+			max_vel: 4,
+			min_vel: 0.1,
+			gravdist: 1.5,
+			circles: 22,
+			safe_colors: true,
+			color_fade: 1.0,
+			color_speed: 4,
+			size_min: 11.0,
+			size_range: 44.0,
+			grav_speed: 0.000001,
+			autoblur: true,
+			manublur: false,
+			chrome: false,
+			color_fade: 1.0,
+			gravMult: 0.33
+		},
+		'fishes': {
+			autoblur: true,
+			blurwind: false,
+			bounce_edges: false,
+			cFadeN: 4,
+			chrome: false,
+			circle_max_color: 1,
+			circles: 22,
+			color_fade: 1.1,
+			color_speed: 4,
+			fade_left: 0.96,
+			fade_right: 1,
+			gravMult: 0.33,
+			gravTime: 1,
+			grav_max_color: 250,
+			grav_range: 2.4,
+			grav_speed: 0.000001,
+			gravdist: 1.5,
+			loop_edges: true,
+			manublur: false,
+			max_color: 249,
+			max_vel: 4,
+			min_vel: 0.1,
+			safe_colors: true,
+			sampling: true,
+			scroll_edges: false,
+			setup: true,
+			size_min: 11,
+			size_range: 44,
+			spikes: true,
+			splatter: false
+		}
+	};
+
+	function togChrome()
+	{
+			var cfg = radVar("config");
+			if( pressing_shift ) cfg.chrome = true;
+			else cfg.chrome = false;
+			console.log("Chrome = " + cfg.chrome);
+			radStore("config", cfg);
+	}
+
+	var ttt = false;
+	var randomModes = [
+		{ mode: 'fishes', time: 5 },
+		{ mode: 'smashing', time: 5 },
+		{ mode: 'excite', time: 5 },
+		{ mode: 'lovers', time: 4 },
+		{ mode: 'phone', time: 10 },
+		{ mode: 'origin', time: 5 },
+		{ mode: 'colorain', time: 5 },
+		{ mode: 'globalls', time: 10 },
+		{ mode: 'speedy', time: 5 },
+		{ mode: 'lights', time: 6 },
+	];
+
+
+
+	function togTooltip()
+	{
+		ttt = !ttt;
+		setTooltip( gE('maincanvas') );
+	}
+	function setTooltip(x)
+	{
+		if( !ttt ) x.title = '';
+		else
+		x.title = `
+		 Instructions
+		b - turn off blur
+		B - turn up blur
+		a - increase circles
+		n - decrease circles
+		a -
+		n -
+		a -
+		s - decrease color speed
+		S - increase color speed
+		c - disable chroming
+		C - enable chroming
+		t - smaller circles
+		T - increase circles size range
+		f - shift fade-on-copy left
+		F - shift fade-on-copy right
+		q - reset gravity
+		`;
+	}
+
+
+	var rNums = [];
+	var rC = 0, rndMax=1771;
+	var gravTimer = -1;
+
+	function qRandom() {
+		if( rNums.length <= rC ) {
+			startRandoms();
+		}
+		rC = (rC+1) % rndMax;
+		return rNums[ rC ];
+	};
+	function startRandoms() {
+		var i;
+		for( i=rNums.length; i<rndMax; ++i ) {
+			rNums.push( Math.random() );
+		}
+	}
+
+	var done = false;
+	function doMe(xx) {
+		if( done ) return;
+		done=true;
+		var xy = gE("ctlbox");
+		blitzTemplate( xy, 'circle_controls' );
+		xx.style.backgroundColor = '#444444';
+		xx.style.borderRight = '1px solid blue';
+	}
+	function undoMe(x) {
+		done=false;
+		var xy = gE("ctlbox");
+		while( xy.childNodes.length > 0 ) {
+			xy.removeChild( xy.childNodes[0] );
+		}
+		x.style.backgroundColor = '';
+		x.style.border = '0px';
+		x + xy;
+	}
+
+var paused=false;
+	function pause() {
+		paused=!paused;
+	}
+
+	var gravTimeout;
+	var running=false;
+	function animate() {
+		if( !cfg.setup ) return;
+		if( paused ) return;
+		if( running ) {
+			return;
+		} else {
+			running = true;
+		}
+		var tn = new Date();
+		gravitate();
+		var tx = new Date();
+		var td = tx - tn;
+		var chg=false;
+		if( gravTimeout < td ) { // using too much cpu.
+			gravTimeout *= 1.5;
+			chg=true;
+		} else if( gravTimeout > td*2/3 ) { // going too slowly.
+			gravTimeout /= 1.5;
+			chg=true;
+		}
+		if(chg){
+			clearInterval(gravTimer);
+			gravTimer = setInterval( "animate()", gravTimeout );
+			if( gravTimeout > 600 )
+				console.log("gt="+gravTimeout);
+		}
+		//console.log(td, tn.getSeconds(), tx.getSeconds());
+		running=false;
+	}
+
+	function samplenear(x, y, cd, samples, etcentricize)
+	{
+		var x0 = Math.floor(x - cd);
+		var y0 = Math.floor(y - cd);
+		var n, p, ix, iy;
+		var zzz = [0,0,0];
+
+		for( n = 0; n < samples; ++n ) {
+			ix = Math.floor( x0 + qRandom() * cd * 2 );
+			iy = Math.floor( y0 + qRandom() * cd * 2 );
+			if( ix < 0 ) ix = fullW + ix;
+			if( iy < 0 ) iy = fullH + iy;
+			if( ix >= fullW ) ix -= fullW;
+			if( iy >= fullH ) iy -= fullH;
+
+			p = (iy * fullW + ix) * 3;
+
+			if( etcentricize ) {
+				xd = Math.abs( ix - x0 );
+				yd = Math.abs( iy - y0 );
+				zzz[0] += (xd/cd) * gravity[p];
+				zzz[1] += (xd/cd) * gravity[p+1];
+				zzz[2] += (xd/cd) * gravity[p+2];
+				zzz[3] += (yd/cd) * gravity[p];
+				zzz[4] += (yd/cd) * gravity[p+1];
+				zzz[5] += (yd/cd) * gravity[p+2];
+			} else {
+				zzz[0] += gravity[p];
+				zzz[1] += gravity[p+1];
+				zzz[2] += gravity[p+2];
+			}
+		}
+
+		if( !etcentricize ) {
+			zzz[0] /= n;
+			zzz[1] /= n;
+			zzz[2] /= n;
+		}
+
+		return zzz;
+	}
+	function splatterpaint(x, y, cd, c, samples)
+	{
+		var x0 = Math.floor(x - cd);
+		var y0 = Math.floor(y - cd);
+
+		var n, p, ix, iy;
+		var xd, yd;
+		var d;
+
+		for( n = 0; n < samples; ++n ) {
+			ix = Math.floor( x0 + ( qRandom() * cd * 2 ) );
+			iy = Math.floor( y0 + ( qRandom() * cd * 2 ) );
+
+			xd = (cd - Math.abs(ix - x));
+			yd = (cd - Math.abs(iy - y));
+
+			if( ix < 0 ) ix = fullW + ix;
+			if( iy < 0 ) iy = fullH + iy;
+			if( ix >= fullW ) ix -= fullW;
+			if( iy >= fullH ) iy -= fullH;
+
+			p = (iy * fullW + ix) * 3;
+
+			if( p > gravity.length || p < 0 ) {
+				console.log("uhhh");
+			}
+			d = (xd + yd) * 0.5;
+
+			if( cfg.safe_colors == true ) {
+				if( typeof cfg.max_color == 'undefined' ) cfg.max_color = 255;
+				gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + cfg.color_speed * d * c.r) & cfg.max_color;
+				gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + cfg.color_speed * d * c.g) & cfg.max_color;
+				gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + cfg.color_speed * d * c.b) & cfg.max_color;
+			} else if( typeof cfg.max_color != 'undefined' ) {
+				gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + cfg.color_speed * d * c.r);
+				gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + cfg.color_speed * d * c.g);
+				gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + cfg.color_speed * d * c.b);
+				if( gravity[p] > cfg.max_color ) gravity[p] = cfg.max_color;
+				if( gravity[p+1] > cfg.max_color ) gravity[p+1] = cfg.max_color;
+				if( gravity[p+2] > cfg.max_color ) gravity[p+2] = cfg.max_color;
+			} else {
+				gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + cfg.color_speed * d * c.r);
+				gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + cfg.color_speed * d * c.g);
+				gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + cfg.color_speed * d * c.b);
+			}
+		}
+	}
+
+	var gravCycler = 0;
+
+	function gravitate() {
+		//clearGravity();
+		//moveCircles();
+		gravCircles();
+
+		var i, c;
+		var x, y, x0, y0, x1, y1;
+		var ix, iy;
+		var p, d;
+		var xd, yd, cd, cd2;
+		var sizefact = 3;
+		var colorfact = 1/2;
+		//console.log("Circles.length=", circles.length);
+		for (i = 0; i < circles.length; ++i) {
+			c = circles[i];
+			var cd = c.d*cfg.gravMult;
+			// console.log(c);
+
+			if( 'splatter' in cfg && cfg.splatter ) {
+				splatterpaint( c.x, c.y, cd, c, cd );
+			} else {
+				cd = cd * sizefact;
+				cd2 = cd*4;
+				x0 = Math.floor(c.x - cd);
+				y0 = Math.floor(c.y - cd);
+				x1 = Math.floor(c.x + cd);
+				y1 = Math.floor(c.y + cd);
+				for (ix = x0; ix <= x1; ++ix) {
+					x = ix;
+					xd = Math.abs(x - c.x);
+					if( x > fullW ) x -= fullW;
+					else if( x < 0 ) x += fullW;
+					xd = xd * xd;
+					for (iy = y0; iy <= y1; ++iy) {
+						y = iy;
+						yd = Math.abs(y - c.y);
+						if( y > fullH ) y -= fullH;
+						else if( y < 0 ) y += fullH;
+						yd = yd * yd;
+						p = (y * fullW + x) * 3;
+						d = Math.sqrt(xd + yd); //Math.sqrt( xd + yd );
+						if( d > cd ) continue;
+						d = cd/d;
+						// console.log(p);
+						//console.log( c.r, c.g, c.b );
+
+						if( cfg.safe_colors == true ) {
+							if( typeof cfg.max_color == 'undefined' ) cfg.max_color = 255;
+							gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + colorfact * cfg.color_speed * d * c.r) & cfg.max_color;
+							gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + colorfact * cfg.color_speed * d * c.g) & cfg.max_color;
+							gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + colorfact * cfg.color_speed * d * c.b) & cfg.max_color;
+						} else if( typeof cfg.max_color != 'undefined' ) {
+							gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + colorfact * cfg.color_speed * d * c.r);
+							gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + colorfact * cfg.color_speed * d * c.g);
+							gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + colorfact * cfg.color_speed * d * c.b);
+							if( gravity[p] > cfg.max_color ) gravity[p] = cfg.max_color;
+							if( gravity[p+1] > cfg.max_color ) gravity[p+1] = cfg.max_color;
+							if( gravity[p+2] > cfg.max_color ) gravity[p+2] = cfg.max_color;
+						} else {
+							gravity[p + 0] = (gravity[p + 0] * cfg.color_fade + colorfact * cfg.color_speed * d * c.r);
+							gravity[p + 1] = (gravity[p + 1] * cfg.color_fade + colorfact * cfg.color_speed * d * c.g);
+							gravity[p + 2] = (gravity[p + 2] * cfg.color_fade + colorfact * cfg.color_speed * d * c.b);
+						}
+					}
+				}
+			}
+		}
+
+		var doaloop=!true, dochrome=false, doblurwind=false;
+		var fade_right, zzz;
+		if( typeof cfg.manublur != 'undefined' && cfg.manublur !== false ) {
+			fade_right = cfg.fade_right;// / (cfg.manublur * 4);
+			doaloop=true;
+		}
+		if( typeof cfg.chrome != 'undefined' && cfg.chrome !== false ) {
+			dochrome=true;
+			doaloop=true;
+		}
+		if( typeof cfg.blurwind != 'undefined' && cfg.blurwind in winds ) {
+			fade_right = cfg.fade_right;// / (cfg.manublur * 4);
+			doaloop=true;
+			doblurwind= cfg.blurwind;
+		}
+
+		if( doaloop ) {
+			gravCycler = (gravCycler+1)%5;
+			doaloop=(gravCycler==1);
+		}
+
+		if( doaloop ) {
+			var chrome_const = 0.25;
+			for( x = 0; x < fullW; ++x ) {
+				for( y = 0; y < fullH; ++y ) {
+					p = (y * fullW + x) * 3;
+
+					if( dochrome ) {
+						gravity[p]   = gravity[p]   + cfg.chrome * chrome_const * (gravity[p+1] + gravity[p+2]) / 2;
+						gravity[p+1] = gravity[p+1] + cfg.chrome * chrome_const * (gravity[p+0] + gravity[p+2]) / 2;
+						gravity[p+2] = gravity[p+2] + cfg.chrome * chrome_const * (gravity[p+0] + gravity[p+1]) / 2;
+						if( cfg.manublur === false ) continue;
+					}
+
+					if( doblurwind !== false ) {
+						//console.log("blurwind");
+						var bw = isNaN( parseInt(cfg.manublur) ) ? 4.0 : cfg.manublur;
+						//console.log("bw=" + bw);
+						zzz = samplenear( x - winds[doblurwind][0]*bw, y - winds[doblurwind][1]*bw, bw, 4 );
+						//zzz = samplenear( x, y, 1, 4 );
+					} else {
+						zzz = samplenear( x, y, cfg.manublur === true ? 1 : Math.ceil(cfg.manublur), 4 );
+					}
+
+					gravity[p] = Math.floor(( gravity[p] * cfg.fade_left + zzz[0] * fade_right ) / 2);
+					gravity[p+1] = Math.floor(( gravity[p+1] * cfg.fade_left + zzz[1] * fade_right ) / 2);
+					gravity[p+2] = Math.floor(( gravity[p+2] * cfg.fade_left + zzz[2] * fade_right ) / 2);
+				}
+			}
+		}
+
+		drawDisplay();
+	}
+	function drawDisplay() {
+		var x, y, d, p, j;
+		img = ctx.getImageData(0, 0, fullW, fullH);
+		d = img.data;
+		var v;
+
+		p = 0;
+		j = 0;
+		//ctx.clearRect(0,0,ctx.width,ctx.height);
+		for (y = 0; y < fullH; ++y) {
+			for (x = 0; x < fullW; ++x) {
+				d[p + 0] = 255 & gravity[j + 0]; // r
+				d[p + 1] = 255 & gravity[j + 1]; // g
+				d[p + 2] = 255 & gravity[j + 2]; // b
+				d[p + 3] = 255; // alpha
+				p += 4;
+				j += 3;
+			}
+		}
+		ctx.putImageData(img, 0, 0);
+		ctx.scale(2,2);
+
+	}
+	// move circles based on the gravity map
+	function gravCircles() {
+		var xd, yd;
+		var x0, y0, x1, y1, x2, y2;
+		var x, y, p, v, total_vx, total_vy;
+		var mdist;
+
+		for (i = 0; i < circles.length; ++i) {
+			c = circles[i];
+			total_vx += circles[i].vx;
+			total_vy += circles[i].vy;
+			mdist = c.d * cfg.gravdist;
+
+			if( false && cfg.sampling != false ) {
+				var m = samplenear( c.x, c.y, mdist, cfg.gravdist * ( cfg.sampling === true ? 1 : cfg.sampling ), true );
+				v =
+					( (c.r / 255) * m[0] ) +
+					( (c.g / 255) * m[1] ) +
+					( (c.b / 255) * m[2] );
+				c.vx += v;// * xd;
+				v =
+					( (c.r / 255) * m[3] ) +
+					( (c.g / 255) * m[4] ) +
+					( (c.b / 255) * m[5] );
+				c.vy += v;// * xd;
+			} else {
+				x0 = Math.floor(c.x - mdist);
+				y0 = Math.floor(c.y - mdist);
+				x1 = Math.ceil(c.x + mdist);
+				y1 = Math.ceil(c.y + mdist);
+				for (x = x0; x <= x1; ++x) {
+					xd = Math.abs(x - c.x);
+					if (x < 0) x2 = fullW + x;
+					else if (x > fullW) x2 = x - fullW;
+					else x2 = x;
+					for (y = y0; y <= y1; ++y) {
+						if (y < 0) y2 = fullH + y;
+						else if (y > fullH) y2 = y - fullH;
+						else y2 = y;
+						yd = Math.abs(y - c.y);
+						p = Math.floor(y2 * fullW + x2) * 3;
+						while( p+2 > gravity.length ) { gravity.push(0); } // lol console.log("Hey");
+						if( isNaN(c.r) || isNaN(c.g) || isNaN(c.b) ) console.log("--nix");
+						if( isNaN(gravity[p+0]) ) gravity[p] = 0;
+						if( isNaN(gravity[p+1]) ) gravity[p+1] = 0;
+						if( isNaN(gravity[p+2]) ) gravity[p+2] = 0;
+	//					|| isNaN(gravity[p+1]) || isNaN(gravity[p+2]) ) { console.log("fjsd"); }
+						v =
+							( (c.r / 255) * (gravity[p + 0]/255) ) +
+							( (c.g / 255) * (gravity[p + 1]/255) ) +
+							( (c.b / 255) * (gravity[p + 2]/255) );
+						v *= cfg.grav_speed * 50000;
+
+						c.vx += v * ( x > c.x ? 1 : -1 ) * xd/mdist;
+						c.vy += v * ( y > c.y ? 1 : -1 ) * yd/mdist;
+					}
+				}
+			}
+
+			while (c.vx > cfg.max_vel || c.vx < -cfg.max_vel)
+				c.vx *= 0.1;
+			while (c.vy > cfg.max_vel || c.vy < -cfg.max_vel)
+				c.vy *= 0.1;
+			/*
+			if( c.vx < min_vel && c.vx > 0 )
+				c.vx ++;
+			else if( c.vx > -min_vel && c.vx < 0 )
+				c.vx --;
+			if( c.vy < min_vel && c.vy > 0 )
+				c.vy ++;
+			else if( c.vy > -min_vel && c.vy < 0 )
+				c.vy --;
+			*/
+
+
+			c.x += c.vx;
+			c.y += c.vy;
+
+			if( cfg.scroll_edges ) {
+				if( c.x < 0 ) {
+					c.x = 0;
+					if( c.vx < 0 )
+						c.vx *= -1;
+				}
+				if( c.x > fullW ) {
+					c.x = fullW;
+					if( c.vx > 0 )
+						c.vx *= -1;
+				}
+				if (c.y < 0) {
+					while( c.y < 0 )
+						c.y += fullH;
+				}
+				if (c.y > fullH) {
+					while( c.y > fullH )
+						c.y -= fullH;
+				}
+			} else if( cfg.loop_edges ) {
+				if (c.x < 0) {
+					while( c.x < 0 )
+						c.x += fullW;
+				}
+				if (c.x > fullW) {
+					while( c.x > fullW )
+						c.x -= fullW;
+				}
+				if (c.y < 0) {
+					while( c.y < 0 )
+						c.y += fullH;
+				}
+				if (c.y > fullH) {
+					while( c.y > fullH )
+						c.y -= fullH;
+				}
+			} else if( cfg.bounce_edges ) {
+				if( c.x < 0 ) {
+					while( c.x < 0 )
+						c.x += fullW;
+					c.vx *= -1;
+				}
+				if( c.y < 0 ) {
+					while( c.y < 0 )
+						c.y += fullH;
+					c.vy *= -1;
+				}
+				if( c.x > fullW ) {
+					while( c.x > fullW )
+						c.x -= fullW;
+					c.vx *= -1;
+				}
+				if( c.y > fullH ) {
+					while( c.y > fullH )
+						c.y -= fullH;
+					c.vy *= -1;
+				}
+			} else {
+				if( c.x < 0 ) c.x = 0;
+				if( c.y < 0 ) c.y = 0;
+				if( c.x > fullW ) c.x = fullW;
+				if( c.y > fullH ) c.y = fullH;
+			}
+		}
+
+		var vvy, vvx;
+		vvx = total_vx / circles.length;
+		vvy = total_vy / circles.length;
+
+		if( Math.abs(vvx) < cfg.min_vel ) {
+			for( var j = 0; j < circles.length; ++j ) {
+				circles[j].vx += qRandom() * cfg.min_vel;
+				circles[j].x = qRandom() * fullW;
+			}
+		}
+
+		if( Math.abs(vvy) < cfg.min_vel ) {
+			for( var j = 0; j < circles.length; ++j ) {
+				circles[j].vy += qRandom() * cfg.min_vel;
+				circles[j].y = qRandom() * fullW;
+			}
+		}
+
+		if( cfg.spikes ) {
+			for( var j = 0; j < circles.length; ++j ) {
+				if( Math.abs(circles[j].vx) < cfg.min_vel/2 && Math.abs(circles[j].vy) < cfg.min_vel/2 ) {
+					circles[j].vx += 2 * qRandom() * cfg.min_vel - cfg.min_vel;
+					circles[j].vy += 2 * qRandom() * cfg.min_vel - cfg.min_vel;
+				}
+				if( Math.abs( Math.abs(circles[j].vx) - Math.abs(circles[j].vy) ) < cfg.min_vel/5 ) {
+					circles[j].vx += 2 * qRandom() * cfg.min_vel - cfg.min_vel;
+					circles[j].vy += 2 * qRandom() * cfg.min_vel - cfg.min_vel;
+				}
+			}
+		}
+	}
+	//https://hacks.mozilla.org/2011/12/faster-canvas-pixel-manipulation-with-typed-arrays/
+	registerStartup(startScreen);
+
+	function setWindTo( direction )
+	{
+		//var cfg = radVar("config");
+		stopPrograms();
+		if( direction == 'none' ) direction = false;
+		cfg.blurwind = direction;
+		radStore("config",cfg);
+
+		return false;
+	}
+
+	var using_default_config=false;
+	function setConfigTo( setup )
+	{
+		if( !using_default_config && setup != 'start' ) {
+			setConfigTo( 'start' ); // set the base configuration values
+		}
+		if( setup != 'start' ) using_default_config = false;
+		else using_default_config = true;
+		stopPrograms();
+		var current_circles = circles.length;
+		var new_cfg = modes[setup];
+
+		while( circles.length > new_cfg.circles ) {
+			circles.shift();
+		}
+		for( var i=0; i < circles.length; ++i ) {
+			if( circles[i].d < new_cfg.size_min ) circles[i].d = new_cfg.size_min;
+			if( circles[i].d > new_cfg.size_min + new_cfg.size_range ) circles[i].d = new_cfg.size_min + new_cfg.size_range;
+			if( circles[i].vx > new_cfg.min_vel ) circles[i].vx = new_cfg.min_vel;
+			if( circles[i].vy > new_cfg.min_vel ) circles[i].vy = new_cfg.min_vel;
+			if( circles[i].vx < new_cfg.max_vel ) circles[i].vx = new_cfg.max_vel;
+			if( circles[i].vy < new_cfg.max_vel ) circles[i].vy = new_cfg.max_vel;
+		}
+		for( var i in new_cfg ) {
+			cfg[i] = new_cfg[i];
+		}
+				cfg.cFadeN = 0;
+				radStore("config",cfg);
+		if( !('manublur' in cfg) || typeof cfg.manublur == 'undefined' ) cfg.manublur = false;
+
+		if( !first_config_load ) {
+			enoughCircles();
+		}
+
+		if( gravTimer != -1 ) {
+			clearInterval(gravTimer);
+		}
+		//clearGravity();
+		gravTimeout = cfg.gravTime;
+		gravTimer = setInterval('animate()', cfg.gravTime);
+
+		return false;
+	}
+
+	function enoughCircles() {
+		while( circles.length > cfg.circles ) {
+			circles.shift();
+		}
+		while( circles.length < cfg.circles ) {
+			addCircle();
+		}
+	}
+
+	function addCircle() {
+		var cindex = Math.floor(qRandom() * colors.length);
+		var velX = qRandom() * ( cfg.max_vel - cfg.min_vel ) + cfg.min_vel;
+		var velY = qRandom() * ( cfg.max_vel - cfg.min_vel ) + cfg.min_vel;
+		if( qRandom()*2 >= 1 ) velX *= -1;
+		if( qRandom()*2 >= 1 ) velY *= -1;
+		var circle = {
+			'x': fullW * qRandom(),
+			'y': fullH * qRandom(),
+			'd': cfg.size_min + cfg.size_range * qRandom(),
+			'r': colors[cindex][0],//qRandom() * cfg.circle_max_color,
+			'g': colors[cindex][1],//qRandom() * cfg.circle_max_color,
+			'b': colors[cindex][2],//qRandom() * cfg.circle_max_color,
+			'vx': velX,
+			'vy': velY,
+		};
+		//console.log(circle.vx);
+		circles.push(circle);
+	}
+	function clearGravity() {
+		var x, y, p = 0;
+		gravity = [];
+		for (y = 0; y < fullH; ++y) {
+			for (x = 0; x < fullW; ++x) {
+				gravity.push(0);
+				gravity.push(0);
+				gravity.push(0);
+				p += 3;
+			}
+		}
+	}
+
+
+	function startScreen() {
+
+
+			basicMenu = [
+
+
+			{ 'title': '<fl style="width: 80px">blur</fl><fl style="width: 80px">(#config.manublur)</fl><fr><btn onclick="helloS(66)">down</btn><fl>/</fl><btn onclick="helloS(66,1)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">circles</fl><fl style="width: 80px">(#config.circles)</fl><fr><btn onclick="helloS(78)">down</btn><fl>/</fl><btn onclick="helloS(65)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">colorspeed</fl><fl style="width: 80px">(#config.color_speed)</fl><fr><btn onclick="helloS(83)">down</btn><fl>/</fl><btn onclick="helloS(83,1)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">size</fl><fl style="width: 80px">(#config.size_min)</fl><fr><btn onclick="helloS(77)">down</btn><fl>/</fl><btn onclick="helloS(77,1)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">growth</fl><fl style="width: 80px">(#config.size_range)</fl><fr><btn onclick="helloS(84)">down</btn><fl>/</fl><btn onclick="helloS(84,1)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">fade</fl><fl style="width: 80px">(#config.color_fade)</fl><fr><btn onclick="helloS(70,1)">cycle</btn><fl>/</fl><btn onclick="helloS(70)">off</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">grav</fl><fl style="width: 80px">(#config.grav_speed)</fl><fr><btn onclick="helloS(71)">down</btn><fl>/</fl><btn onclick="helloS(71,1)">up</btn></fr>' },
+			{ 'title': '<fl style="width: 80px">impact</fl><fl style="width: 80px">(#config.gravMult)</fl><fr><btn onclick="helloS(73)">down</btn><fl>/</fl><btn onclick="helloS(73,1)">up</btn></fr>' },
+			{ 'title': '<cl></cl>' },
+			{ 'title': 'clear', 'act': 'helloS(81)' },
+			{ 'title': 'Pause', 'act': 'pause()' },
+			{ 'title': 'drop the beat', 'act': 'dropTheBeat()' },
+			{ 'title': 'toggles', 'children': [
+				{ 'title': 'splatter', 'act': 'helloS(86)' },
+				{ 'title': 'tooltip', 'act': 'togTooltip()' },
+				{ 'title': 'chroming', 'act': 'togChrome()' },
+				{ 'title': 'autoreset', 'act': 'toggle_auto_reset()' },
+			] },
+			{ 'title': 'winds', 'children': [
+				{ 'title': 'se', 'act': 'setWindTo("se")' },
+				{ 'title': 'ne', 'act': 'setWindTo("ne")' },
+				{ 'title': 'sw', 'act': 'setWindTo("sw")' },
+				{ 'title': 'nw', 'act': 'setWindTo("nw")' },
+				{ 'title': 's', 'act': 'setWindTo("s")' },
+				{ 'title': 'e', 'act': 'setWindTo("e")' },
+				{ 'title': 'w', 'act': 'setWindTo("w")' },
+				{ 'title': 'n', 'act': 'setWindTo("n")' },
+				{ 'title': 'none', 'act': 'setWindTo("none")' },
+			] },
+			{ 'title': 'modes', 'children': [
+				{ 'title': 'phone', 'act': 'setConfigTo("phone");' },
+				{ 'title': 'origin', 'act': 'setConfigTo("origin")' },
+				{ 'title': 'lights', 'act': 'setConfigTo("lights")' },
+				{ 'title': 'excite', 'act': 'setConfigTo("excite")' },
+				{ 'title': 'speedy', 'act': 'setConfigTo("speedy")' },
+				{ 'title': 'lovers', 'act': 'setConfigTo("lovers")' },
+				{ 'title': 'globalls (might break)', 'act': 'setConfigTo("globalls")' },
+				{ 'title': 'colorain', 'act': 'setConfigTo("colorain")' },
+				{ 'title': 'fishes', 'act': 'setConfigTo("fishes")' },
+				{ 'title': 'random', 'act': 'randomBlast()' }
+			] }
+				];
+
+			structMenu(basicMenu);
+
+		radClass({
+			'zenbox': {
+				'style': 'display: none',
+				'keepscan': 1
+			}
+		});
+		radLoad();
+
+
+		startRandoms();
+		registerResize( resizeScreen );
+		resizeScreen();
+
+		fullW = Math.floor(winW/2);
+		fullH = Math.floor(winH/2);
+		first_config_load=true;
+		setConfigTo("start");
+		setTimeout("randomBlast()", 1000);
+	}
+	var fullW=0, fullH=0;
+	var rst = -1;
+	function resizeScreen() {
+		if( rst != -1 ) clearTimeout(rst);
+		rst = setTimeout("resizeScreen2()", 15);
+	}
+	function resizeScreen2() {
+		rst = -1;
+		fullW = Math.floor(winW/2);
+		fullH = Math.floor(winH/2);
+		var mscroll = gE("mainscroll");
+		var canvas = gE("maincanvas");
+		mscroll.removeChild( canvas );
+		canvas = cE("canvas");
+		setTooltip(canvas);
+		canvas.width = fullW;
+		canvas.height = fullH;
+		canvas.style.width = fullW*2 + "px";
+		canvas.style.height = fullH*2 + "px";
+		canvas.id = 'maincanvas';
+		mscroll.appendChild(canvas);
+		setTimeout('finishResizeScreen()', 15);
+	}
+	function processMouse(ev)
+	{
+		// change velocities near the mouse pointer
+		var i, distX, distY, dist, normX, normY;
+		var mX = ev.clientX, mY = ev.clientY;
+		var MAXDIST = 200.0;
+
+		for( i = 0; i < circles.length; ++i ) {
+			distX = circles[i].x - mX;
+			distY = circles[i].y - mY;
+			dist = Math.sqrt( distX*distX + distY*distY );
+			if( dist > MAXDIST ) continue;
+			normX = distX/dist;
+			normY = distY/dist;
+			normX=normX*1000;
+			normY=normY*1000;
+			//console.log("Impulse: " + normX + "," + normY + " (dist=" + dist + " " + distX + "," + distY + ")");
+			console.log("Velfr " + circles[i].vx + "," + circles[i].vy);
+			circles[i].vx -= normX;
+			circles[i].vy -= normY;
+			console.log("Vel:: " + circles[i].vx + "," + circles[i].vy);
+		}
+	}
+	function finishResizeScreen()
+	{
+		var canvas = gE("maincanvas");
+		canvas.style.position = 'absolute';
+		canvas.style.top = '0px';
+		canvas.style.left = '0px';
+		canvas.onclick = processMouse;
+		//canvas.style.width = fullW + "px";
+		//canvas.style.height = fullH + "px";
+		ctx = canvas.getContext('2d');
+		img = ctx.getImageData(0, 0, fullW, fullH);
+		cfg.setup = true;
+		clearGravity();
+		if( first_config_load ) {
+			while( circles.length < cfg.circles ) {
+				addCircle();
+			}
+			first_config_load=false;
+			//setTimeout("dropTheBeat()", 7444);
+		}
+	}
+	registerKeyboard(helloSmurfs);
+	registerKeyUp(byebyeSmurfette);
+	var pressing_shift;
+	function byebyeSmurfette(keys)
+	{
+		if( keys == 16 ) pressing_shift = false;
+	}
+	function helloS(k,b)
+	{
+		var was_shifting = pressing_shift;
+		console.log("helloS(" + k + ")");
+		if( b == 1 ) {
+			pressing_shift = true;
+			helloSmurfs(k);
+		} else {
+			pressing_shift = false;
+			helloSmurfs(k);
+		}
+		pressing_shift = was_shifting;
+	}
+	var program_timer=-1;
+	function stopPrograms()
+	{
+		if( program_timer != -1 ) {
+			console.log("Program.stop");
+			clearTimeout(program_timer);
+			program_timer=-1;
+		}
+		if( rTimer != -1 ) {
+			clearTimeout(rTimer);
+			rTimer=-1;
+		}
+	}
+
+	var rTimer=-1;
+	var rMode=0;
+	var rBlast=0;
+	function randomBlast()
+	{
+		rBlast=40;
+		randomMode();
+	}
+	function randomMode()
+	{
+		var timeout=0;
+		var w = randomModes.length;
+		var n = parseInt(Math.floor(Math.random()*w));
+		var mode = randomModes[n];
+		setConfigTo(mode.mode);
+		if(rBlast>0)
+			rBlast--;
+		rTimer = setTimeout('randomMode()', mode.time*500 );
+	}
+
+	var beat_was_shifting = false;
+	function dropTheBeat()
+	{
+		stopPrograms();
+		console.log("dropTheBeat()");
+		cfg.chrome=true;
+		cfg.circles = 12;
+		cfg.splatter=false;
+		cfg.color_speed = 17;
+		cfg.grav_speed = 0.0005;
+		radStore("config", cfg);
+		enoughCircles();
+		program_timer = setTimeout('wakeUpNowChildren1()', 1250);
+	}
+
+	function wakeUpNowChildren1()
+	{
+		stopPrograms();
+		console.log("wakeUpNowChildren1()");
+		cfg.splatter = false;
+		cfg.chrome = false;
+		cfg.color_speed = 8;
+		radStore("config", cfg);
+		program_timer = setTimeout('wakeUpNowChildren()', 250);
+	}
+	function theBeatDropped()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		console.log("theBeatDropped()");
+		circles=[];
+		cfg.chrome=false;
+		cfg.circles = 33;
+		cfg.size_range = 4.0;
+		cfg.color_fade = 0.5;
+		radStore("config", cfg);
+		enoughCircles();
+		program_timer = setTimeout('wakeUpNowChildren()', 1070);
+	}
+
+	function wakeUpNowChildren()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		console.log("wakeUpNowChildren()");
+		cfg.chrome=false;
+		cfg.grav_speed = 0.005;
+		cfg.splatter = false;
+		cfg.circles = 2;
+		cfg.size_min = 0.001;
+		cfg.size_range = 0.0;
+		cfg.color_fade = 1.2;
+		radStore("config", cfg);
+		enoughCircles();
+		program_timer = setTimeout('letTheBeatRock()', 3450);
+	}
+
+	function letTheBeatRock()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		stopPrograms();
+		console.log("letTheBeatRock()");
+		cfg.chrome=false;
+		cfg.splatter=false;
+		cfg.circles = 60;
+		cfg.color_fade = 0.99;
+		cfg.color_speed = 14.41;
+		cfg.size_range = 7;
+		cfg.size_min = 7;
+		cfg.grav_speed = 0.005;
+		cfg.gravMult = 0.5;
+		cfg.grav_range = 2.4;
+		cfg.splatter=true;
+		circles=[];
+		radStore("config", cfg);
+		enoughCircles();
+		program_timer = setTimeout("fRun(0)", 6000);
+	}
+
+	function fRun(n)
+	{
+		if( program_timer == -1 ) return; // program stopped
+		cfg.manublur = n;
+		if( n > 12 ) {
+			program_timer = setTimeout("gRun(12)", 100);
+			cfg.manublur = false;
+		} else {
+			program_timer = setTimeout("fRun(" + (n+2) + ")", (n/12)*50);
+		}
+	}
+
+	function gRun(n)
+	{
+		if( program_timer == -1 ) return; // program stopped
+		cfg.manublur = n;
+		if( n <= 0 ) {
+			cfg.manublur = false;
+			setConfigTo("excite");
+			program_timer = setTimeout("finalizeProgram()", 3000)
+		} else {
+			program_timer = setTimeout("gRun(" + (n-0.33) + ")", (1-n/12)*50);
+		}
+	}
+
+
+	function finalizeProgram()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		setConfigTo("phone");
+		cfg.color_speed = 15;
+		cfg.grav_speed = 0.00001;
+		cfg.color_fade = 1.2;
+		cfg.splatter = true;
+		cfg.size_min = 6;
+		cfg.size_range = 1;
+		cfg.max_vel = 10;
+		cfg.min_vel = 10;
+		program_timer = setTimeout("subFinalBeat()", 3000)
+	}
+
+	function subFinalBeat()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		setConfigTo("origin");
+		program_timer = setTimeout("finalize2Program()", 500)
+	}
+	function finalize2Program()
+	{
+		if( program_timer == -1 ) return; // program stopped
+		setConfigTo("phone");
+		stopPrograms();
+	}
+
+	var reset_timer = -1;
+	function toggle_auto_reset()
+	{
+		if( reset_timer != -1 ) {
+			clearTimeout(reset_timer);
+			reset_timer=-1;
+		} else {
+			reset_timer = setTimeout("autoReset()", 1);
+		}
+	}
+	function autoReset()
+	{
+		if( reset_timer == -1 ) return;
+		clearGravity();
+		//setConfigTo("origin");
+		reset_timer = setTimeout("autoReset()", 120000);
+	}
+
+
+	function fixFloat(f, n=4)
+	{
+		return Number(f).toFixed(n);
+	}
+
+	function helloSmurfs(keys)
+	{
+		stopPrograms();
+		console.log(keys);
+		if( keys == 16 ) pressing_shift = true;
+		if( keys == 66 ) { // b
+			if( pressing_shift ) cfg.manublur = fixFloat(cfg.manublur ? cfg.manublur * 1.75 : 1);
+			else cfg.manublur=false;
+			console.log("Blur=" + cfg.manublur);
+		} else if( keys == 65 ) { // a - add circle
+			cfg.circles = cfg.circles + 1;
+			while( circles.length < cfg.circles ) {
+				addCircle();
+			}
+			console.log("Circles=" + cfg.circles);
+		} else if( keys == 78 ) { // n - remove circle
+			--cfg.circles;
+			while( circles.length > cfg.circles ) {
+				circles.shift();
+			}
+			console.log("Circles=" + cfg.circles);
+		} else if( keys == 65 ) { // a
+			I(Love(You));;
+			cfg.circles = cfg.circles + 1000000000000000000000;
+		} else if( keys == 78 ) { // n -
+		} else if( keys == 65 ) { // a
+		} else if( keys == 83 ) { // s. change color speed
+			if( pressing_shift ) cfg.color_speed += 0.5;
+			else cfg.color_speed -= 0.5;
+			console.log("ColorSpeed: " + cfg.color_speed);
+		} else if( keys == 67 ) { // c - chrome
+			if( pressing_shift ) cfg.chrome = true;
+			else cfg.chrome = false;
+			console.log("Chrome = " + cfg.chrome);
+		} else if( keys == 84 ) { // t - size
+			if( pressing_shift ) {
+				cfg.size_range = fixFloat( cfg.size_range * 1.5, 7 );
+				if( cfg.size_range > 100 ) cfg.size_range = 100;
+				circles.shift(); circles.shift(); circles.shift(); circles.shift(); circles.shift();
+				addCircle(); addCircle(); addCircle(); addCircle(); addCircle();
+			} else {
+				cfg.size_range = fixFloat( cfg.size_range / 1.5, 7 );
+				if( cfg.size_range < 4 ) cfg.size_range = 4;
+				circles.shift(); circles.shift(); circles.shift(); circles.shift(); circles.shift();
+				addCircle(); addCircle(); addCircle(); addCircle(); addCircle();
+			}
+			console.log("Size range: " + cfg.size_range);
+		} else if( keys == 77 ) { // m - size_min
+			if( pressing_shift ) {
+				cfg.size_min = fixFloat( cfg.size_min * 1.5, 7 );
+				if( cfg.size_min > 100 ) cfg.size_min = 100;
+				circles.shift(); circles.shift(); circles.shift(); circles.shift(); circles.shift();
+				addCircle(); addCircle(); addCircle(); addCircle(); addCircle();
+			} else {
+				cfg.size_min = fixFloat( cfg.size_min / 1.5, 7 );
+				if( cfg.size_min < 4 ) cfg.size_min = 4;
+				circles.shift(); circles.shift(); circles.shift(); circles.shift(); circles.shift();
+				addCircle(); addCircle(); addCircle(); addCircle(); addCircle();
+			}
+			console.log("Size min: " + cfg.size_range);
+		} else if( keys == 70 ) { // f - fade
+			if( pressing_shift ) {
+				cfg.cFadeN = ( cfg.cFadeN + 1  ) % fades.length;
+				cfg.color_fade = fades[ cfg.cFadeN ];
+				//cfg.color_fade += 0.01;
+				/*
+				cfg.fade_left += 0.1;
+				cfg.fade_right -= 0.1;C
+				if( cfg.fade_right < 0 ) { cfg.fade_right = 0; cfg.fade_left = 1.0; }
+
+				console.log("Fade: left=" + cfg.fade_left + ", right=" + cfg.fade_right);
+				*/
+				console.log("Fade: " + cfg.color_fade);
+
+			} else {
+				cfg.color_fade = 1;
+				/*
+				cfg.fade_left -= 0.1;
+				cfg.fade_right += 0.1;
+				if( cfg.fade_left < 0 ) { cfg.fade_left = 0; cfg.fade_right = 1.0; }
+				console.log("Fade: left=" + cfg.fade_left + ", right=" + cfg.fade_right);*/
+				console.log("Fade: " + cfg.color_fade);
+			}
+		} else if( keys == 71 ) { // g
+			if( pressing_shift ) {
+				cfg.grav_speed = fixFloat( cfg.grav_speed * 10, 8 );
+			} else {
+				cfg.grav_speed = fixFloat( cfg.grav_speed / 10, 8 );
+				if( cfg.grav_speed < 0.000000001 ) cfg.grav_speeed = 0.00034678921;
+			}
+			console.log("grav_speed: " + cfg.grav_speed);
+		} else if( keys == 73 ) { // i
+			if( pressing_shift ) {
+				cfg.gravMult += 0.15;
+			} else {
+				cfg.gravMult -= 0.15;
+			}
+			console.log("gravMult: " + cfg.gravMult);
+		} else if( keys == 86 ) { // v
+			cfg.splatter = !cfg.splatter;
+			console.log("Splatter: " + cfg.splatter);
+		} else if( keys == 81 ) { // q
+			resizeScreen(); // yep... this is called tail recursion... my apologies for any inconvenience.
+		} else if( keys == 32 ) { // spacebar
+			pause();
+		}
+
+		radStore("config", cfg);
+	}
+
+	/* Instructions
+	b - turn off blur
+	B - turn up blur
+	a - increase circles
+	n - decrease circles
+	a -
+	n -
+	a -
+	s - decrease color speed
+	S - increase color speed
+	c - disable chroming
+	C - enable chroming
+	f - shift fade-on-copy left
+	F - shift fade-on-copy right
+	*/
+</script>

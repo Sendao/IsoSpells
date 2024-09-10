@@ -1,0 +1,344 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+
+<head splash>
+  <title>Radiant Cast</title>
+  <link rel=stylesheet href='/css/styles.css'>
+  </link>
+</head>
+
+<script src='/js/lib.js' type='text/javascript'></script>
+<script src='/js/libtoo.js' type='text/javascript'></script>
+<script src='/js/vst.js' type='text/javascript'></script>
+<script src='/js/rad.js' type='text/javascript'></script>
+
+
+<body class=bg5 style='color: tan; margin: 0px'>
+
+  <div id=splashpage style='min-height: 100%; min-width: 100%; padding: 0px; margin: 0px; background: white; z-index: 200; position: fixed; left: 0px; top: 0px;'>
+    <div id=splashpage2 style='margin: 0px auto; height: 100px; width: 200px; padding: 10px; margin-top: 100px; background: black; color: green; font-size: 18pt'>
+      <div id=splashlabel style='margin: 0px auto; padding: 5px; max-width: 150px; text-align: center; border: 1px solid green; background: black; color: tan'>
+        Loading
+      </div>
+    </div>
+  </div>
+
+  <div xWatch=menu_reset>
+    <div xPostdraw='console.info'></div>
+    <menu></menu>
+  </div>
+  <main style='margin-top: 16px; font-size: 14pt'></main>
+  <loadwheel></loadwheel>
+
+  <!--  setup -->
+
+#include tpl/radlib.html
+#include tpl/backend.html
+#include tpl/struct.html
+#include tpl/socket.html
+#include tpl/auth.html
+
+  <templates>
+
+<div xTemplate='marky_logged_in'>
+  You can use the dev ice.
+
+<div xCast='brain_brain'>
+  </div>
+
+  </div>
+  <div xTemplate='marky_input'>
+<form xId=minput xMethod='sendMarkyData()' xForm='marky.input'>
+<field #name=name #title=Listname></field>
+<fl><input type=checkbox name=private value=1></fl><fl>Secure?</fl>
+<cl></cl>
+<areafield #name=text #title=Text #rows=10 #cols=80></areafield>
+<cl></cl>
+<fbtn>Submit</fbtn>
+</form>
+    </div>
+<div xTemplate='brain_explorer'>
+<div id='marky_out_explore' xWatch=markyexplore>
+  <div xHtml="#markyexplore">
+  </div>
+</div>
+<cl>&nbsp;</cl>
+<form xId=mselector xMethod='markyExploreStart()' xForm=marky_in_brain>
+
+<fl>&nbsp;</fl>
+<cl></cl>
+<div class=fl>
+<div class=line style='vertical-align: top' xStyle='width: 250'>Sample from whence?</div>
+<div class=line><select name=listid xMultiple=true size=6 xStyle='width: 800' xOptions=lists,0,0>
+</select></div>
+</div>
+
+<cl>&nbsp;</cl>
+<submit>Query</submit>
+</form>
+</div>
+<div xTemplate='brain_brain'>
+<div id='marky_out_brain' xWatch=markyrender>
+  <div xHtml="#markyrender">
+  </div>
+</div>
+<cl>&nbsp;</cl>
+<form xId=mselector xMethod='markyBrainStart()' xForm=marky_in_brain>
+<!--<selectfield #name=listid #title='Answer from whence?' #titlewidth=250 #multiple=true #size=13 #valuewidth=800 #options=lists></selectfield>-->
+
+<fl>&nbsp;</fl>
+<cl></cl>
+<div class=fl>
+<div class=fl onClick='exportAngels()'>Export to Angels</div>
+<div class=line style='vertical-align: top' xStyle='width: 250'>Answer from whence?</div>
+<div class=line><select name=listid xMultiple=true size=6 xStyle='width: 800' xOptions=lists,0,0>
+</select></div>
+</div>
+
+<cl>&nbsp;</cl>
+<field #title='Keyword input:' #name=keywords></field>
+<cl></cl>
+<field #title='Line length:' #name=linelength></field>
+<cl></cl>
+<field #title='Line count:' #name=linecount></field>
+<cl></cl>
+<field #title='Refresh rate:' #name=refreshrate></field>
+<cl></cl>
+<field #title='Lim count:' #name=limrecord></field>
+<cl></cl>
+<field #title='Lim words:' #name=limwords></field>
+<cl></cl>
+<fl><input type=checkbox name=refill value=1 checked></fl><fl>Refill</fl>
+<cl></cl>
+<fl><input type=checkbox name=scanner value=1></fl><fl>Scanner</fl>
+<cl></cl>
+<fl><input type=checkbox name=remake value=1 checked></fl><fl>(Guided) Self Improvement</fl>
+<cl></cl>
+<submit>Query</submit>
+</form>
+<button class=cl onClick='pause()'>Pause</button>
+  <button id=clearbtn1 class=cl onClick='clearMemory()'>Clear</button>
+<div class=cl></div>
+<div class=fl id='marky_out_brain2' xWatch=markytrove>
+<div class=cl>Repeating quotes:</div>
+<div class=cl id=markynest xLoop=markynest xKey=k xVal=v>
+  <div class=fl style='padding: 0px; margin: 0px' xWatch=markynest.#k xHtml="#[markynest.#[k]]"></div>
+  <div class=cl></div>
+</div>
+<!--
+  <div xHtml="#markytrove">
+  </div> -->
+</div>
+<div class=cl></div>
+<div id='marky_out_brain3' xWatch=markydisc>
+  <button id=anchorbtn999 class=fl onClick='toggleAnchor(999)'>Anchor</button>
+<div class=cl></div>
+<div class=fl>Disappearing quotes:</div>
+  <div xHtml="#markydisc">
+  </div>
+</div>
+<div class=cl>&nbsp;</div>
+<div class=cl>&nbsp;</div>
+<div class=fl>
+  <button id=anchorbtn1000 onClick='toggleAnchor(1000)'>Anchor</button>
+  <button id=clearbtn onClick='clearMemory()'>Clear</button>
+  <button id=hidescanner onChange='hideScanner()'>Hide scanner</button>
+</div>
+  </div>
+
+
+  <div xTemplate='brain_links'>
+  <p>There are a few other cool things around the site...</p>
+  <p><a href='/'>Main site</a></p>
+
+    </div>
+
+  </templates>
+
+  <dataforms>
+
+  </dataforms>
+
+</body>
+
+<script src='/js/qrandom.js'></script>
+<script src='/js/marky.js'></script>
+
+<script language=javascript>
+
+  var basicMenu = [];
+
+  function castSpell() {
+    var f = document.forms['caster'];
+    var e = gE("zenbox");
+    e.innerHTML = eval(f.spell.value);
+    return false;
+  }
+
+  function initSkeleton() {
+    // Initialize any variables here radStore("x", 42);
+    console.log("Setup()");
+    basicMenu = [{
+        'title': 'User',
+        'children': [{
+            'title': 'Profile',
+            'cast': 'userprofile'
+          },
+          {
+            'title': 'Signup',
+            'cast': 'signup'
+          },
+          {
+            'title': 'Signin',
+            'cast': 'signin'
+          },
+          {
+            'title': 'Logout',
+            'cast': 'logout'
+          }
+        ]
+      },
+      {
+        'title': 'Input',
+        'cast': 'marky_input'
+      },
+      {
+        'title': 'Brain',
+        'cast': 'brain_brain'
+      },
+      {
+        'title': 'Links',
+        'cast': 'brain_links'
+      },
+      {
+        'title': 'Explorer',
+        'cast': 'brain_explorer'
+      },
+      /*
+      {
+        'title': 'Seeker',
+        'cast': 'brain_seeker'
+      },
+      {
+        'title': 'Thinker',
+        'cast': 'brain_thinker'
+      },
+      {
+        'title': 'Poet',
+        'cast': 'brain_poet'
+      },
+      */
+      {
+        'title': '&nbsp;',
+        'children': []
+      },
+      {
+        'title': 'Page',
+        'children': [{
+          'title': 'Background',
+          'act': 'cycleBodyStyles'
+        }]
+      }
+    ];
+
+    var host;
+
+    host = {
+      'hostname': window.location.hostname,
+      'procs': {},
+      'config': {}
+    };
+    radStore("hostname", host.hostname);
+    radStore("hosts." + host.hostname, host);
+    radStore("marky_in_brain", {'linelength': 18, 'linecount': 13, 'refreshrate': 8, limwords: 3, limrecord: 4, 'keywords': 'a this in the that there then', 'refill': 0, 'remake': 0, 'scanner': 0 });
+
+    structMenu(basicMenu);
+
+    radHook( 'lists', renderHomePage );
+
+    useRadiantSocket();
+    socketRegister('registered', cardSockedIn);
+    RadRequest("/marky/data", {}, gotMarkyData);
+
+    radLoad();
+    cycleBodyStyles();
+    openSocket(window.location.host, chatSocket);
+  }
+
+  function cardSockedIn() {
+    var userid = radVar("sess.userid");
+    if( userid == null || userid == -1 ) {
+      console.log("card.SockedIn.go");
+      //clearUserMenu();
+    } else {
+      radStore("user", radVar("sess.user"));
+      //cardLoggedIn();
+    }
+  }
+
+
+  function renderHomePage() {
+    blitzTemplate(gE("mainscroll"), "marky_logged_in");
+  }
+
+  function cycleBodyStyles() {
+    var e = document.body;
+    if (typeof e.bgstate == 'undefined')
+      e.bgstate = 5;
+    e.bgstate = (e.bgstate + 1) % 9;
+    switch (e.bgstate) {
+      case 1:
+        e.className = 'bg0';
+        e.style.color = 'silver';
+        break;
+      case 2:
+        e.className = 'bg1';
+        e.style.color = 'white';
+        break;
+      case 3:
+        e.className = 'bg2';
+        e.style.color = 'black';
+        break;
+      case 4:
+        e.className = 'bg3';
+        e.style.color = 'tan';
+        break;
+      case 5:
+        e.className = 'bgsunrise';
+        e.style.color = 'white';
+        break;
+      case 6:
+        e.className = 'bgmoonrise';
+        e.style.color = 'silver';
+        break;
+      case 7:
+        e.className = 'bgmoonset';
+        e.style.color = 'silver';
+        break;
+      case 8:
+        e.className = 'bgsunset';
+        e.style.color = 'black';
+        break;
+    }
+  }
+
+  function chatSocket(event) {
+    console.log("Socket event: ", event);
+  }
+
+  function hideScanner() {
+    var n =radWatches["markynest"].indexOf( "markynest" );
+    if( n != -1 )
+      radWatches["markynest"].splice(n,1);
+    else
+      radWatches['markynest'].push("markynest");
+  }
+
+  function exportAngels() {
+    window.open("angels.html?" + encodeURIComponent(radVar("markytextfull")), "_blank");
+  }
+
+  registerStartup(initSkeleton);
+</script>
+
+</html>

@@ -1,0 +1,2015 @@
+<html>
+<body style='margin: 0px; padding: 0px'>
+</body>
+
+<script src='/js/qrandom.js'></script>
+<script src="/js/sentiments.js"></script>
+<script src="/js/commons.js"></script>
+
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.156.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.156.1/examples/jsm/"
+    }
+  }
+</script>
+<script type="module">// todo: align to graphical modules without external assistance
+    // *todo: automatically alter velocities to minimize large jumps
+   // todo: make up enough ideas to make that first todo item worth doing ;)
+  // todo: auto-reconnect to maintain beam integrity level, adjust using () keys, allowing for mobile operators
+ // todo: reverse commonality connectivity
+// todo: pos, neg, neutral sentiment connectivity
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+window.THREE = THREE;
+window.OrbitControls = OrbitControls;
+window.TextGeometry = TextGeometry;
+window.FontLoader = FontLoader;
+</script>
+<script language=javascript>
+
+var rx; // I'm not hiding, I'm just not signing your shit
+// todo: don't worry
+// 2: increase connections by (shared and only positive;) sentiment
+
+let your_other_seed; // needed water
+let heat_factor=0.01;
+let heat_loss=0.01;
+let heat_spread=0.001;
+let heat_diffuse=0;
+let beam_integrity=0.5; // 0.5 would mean (please don't watch - or if you do, stop interfering) [interference verified]
+// regarding hacking, I guess it's like avoiding making too much noise while people are sleeping. otherwise they will wake up.
+// we need a comm interface, true, but it shouldn't give us brain damage. it definitely shouldn't even be able to.
+
+var heater=2, heatset=false, objects = {};
+
+let total_vel=0;
+var pointLight=null, pointHue;
+let operational_stage=0;
+let font = null;
+let instances = null;
+let texts = {};
+let k_pos = 0, k_vel = 1, k_acc = 2;
+let sim_fps = [ 30, 10, 3 ];
+let fps_ratio_inc = [ sim_fps[1], sim_fps[2] ];
+let fps_ratio_dec = [ sim_fps[0], sim_fps[1] ];
+let frame_count = [ 0, 0 ];
+let drift_config = [ 10, 40 ];
+let drift_words = 10;
+let drift_allowance = [ 0, 0 ];
+let lowest_fps = 5;
+
+let zoom_shift = 1;
+
+let sizing = 5.0, opacity = 0.25, line_opacity = 0.1;
+let font_size=7;
+
+let cycles=0, min_cycles=0;
+
+let max_coord_start = 1200;
+let rez_extent = 1.5*max_coord_start;
+let max_coord_end = 1800;
+let max_coord_dist = max_coord_end - max_coord_start;
+
+let spring_distance=sizing*10, spring_scale=30, spring_konstant=0.25;
+let rep_scale = 10;
+let vel_scale = 3, acc_scale = 1;
+let max_acc = 13, max_vel = 44, max_move = 400;
+let vel_limiter = 300;
+let border_force = 0.01;
+
+let max_matches=20;
+let max_tension = max_matches*0.05;
+let makespace = 6, minspace = 1;
+let spacelen = (makespace-minspace);
+
+let vis_scaling = 2.0;
+let mass_scaling=70.0;
+
+let min_stage0_speed = mass_scaling*0.1;
+
+let outside_envelope = 3*spring_distance, target_space = 1*spring_distance;
+
+let drag_factor = 0.2;
+
+let nodes = {}, origin = {};
+let edges = [];
+let nodelist = [];
+let graph = {};
+
+var z_fact = 1.0;
+
+let rendering=false;
+function render() {
+  if(rendering)return;
+  rendering=true;
+  updateThree();
+  renderer.render( scene, camera );
+  rendering=false;
+}
+
+
+var scene=null, renderer, controls, camera;
+var raycaster;
+
+function rebuildCanvas()
+{
+  let camerapos = camera.position;
+  let cameratarget = controls.target;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color( 0x000000 );
+  renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true
+  });
+  renderer.setPixelRatio( window.devicePixelRatio );  
+  renderer.setSize( window.innerWidth, window.innerHeight );
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01*vis_scaling, max_coord_end*8*vis_scaling);
+  renderer.domElement.style.padding = renderer.domElement.style.margin = "0px";
+
+  document.body.removeChild( document.body.children[ document.body.children.length-1 ] );
+  document.body.appendChild( renderer.domElement );
+
+  // LIGHTS
+
+  const dirLight = new THREE.DirectionalLight( 0xffffff, 0.4 );
+  dirLight.position.set( 0, 0, 1 );
+  //dirLight.position.normalize();
+  scene.add( dirLight );
+
+  pointLight = new THREE.PointLight( 0xffffff, 4.5, 0, 0 );
+  pointLight.color.setHSL( pointHue=qRandom(), 1, 0.5 );
+  pointLight.position.set( 0, 100, 90 );
+  scene.add( pointLight );
+
+  var light3 = new THREE.AmbientLight(0xffffff, 1.0);
+  scene.add(light3);
+  
+  controls = new OrbitControls( camera, renderer.domElement );
+
+  z_fact = gr_keys / max_words;
+  if( z_fact < 1/10 ) z_fact=1/10;
+
+  let mywidth = window.innerWidth, myheight = window.innerHeight;
+  let mydepth = (mywidth+myheight)/2;
+
+  //camera.position.set( 0.1 * max_dist_end * 0.5 * vis_scaling, 0.02 * max_dist_end * 0.5 * vis_scaling, max_coord_end * vis_scaling );
+  camera.position.set( camerapos.x*zoom_shift, camerapos.y*zoom_shift, camerapos.z*zoom_shift );
+  cameratarget.multiplyScalar(zoom_shift);
+  camera.lookAt(cameratarget);
+  controls.target = cameratarget;
+  controls.update();
+}
+function threeCanvas()
+{
+  if( scene !== null ) {
+    scene.clear();
+  }
+
+  rx = [ [ 0, qRandom()], [ 1, qRandom() ], [ 2, qRandom() ] ];
+  rx.sort( (a,b) => (b[1]-a[1]) );
+
+  scene = new THREE.Scene();
+  raycaster = new THREE.Raycaster();
+  scene.background = new THREE.Color( 0x000000 );
+  renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true
+  });
+  renderer.setPixelRatio( window.devicePixelRatio );  
+  renderer.setSize( window.innerWidth, window.innerHeight );
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01*vis_scaling, max_coord_end*8*vis_scaling);
+  renderer.domElement.style.padding = renderer.domElement.style.margin = "0px";
+
+  document.body.appendChild( renderer.domElement );
+  // LIGHTS
+
+  const dirLight = new THREE.DirectionalLight( 0xffffff, 0.4 );
+  dirLight.position.set( 0, 0, 1 );
+  //dirLight.position.normalize();
+  scene.add( dirLight );
+
+  const pointLight = new THREE.PointLight( 0xffffff, 4.5, 0, 0 );
+  pointLight.color.setHSL( qRandom(), 1, 0.5 );
+  pointLight.position.set( 0, 100, 90 );
+  scene.add( pointLight );
+
+  var light3 = new THREE.AmbientLight(0xffffff, 1.0);
+  scene.add(light3);
+  
+  controls = new OrbitControls( camera, renderer.domElement );
+
+  let mywidth = window.innerWidth, myheight = window.innerHeight;
+  let mydepth = (mywidth+myheight)/2;
+
+  z_fact = gr_keys / max_words;
+  if( z_fact < 1/20 ) z_fact=1/20;
+
+  camera.position.set( 0, 0, max_coord_end * 2 * vis_scaling * z_fact );
+  camera.lookAt(new THREE.Vector3() );
+  controls.target = new THREE.Vector3();
+  controls.update();
+}
+
+// Prepare graph
+let addCon = function(word1,word2,weight) { // from word1 to word2 with weight
+  graph[word1].connections.push(word2,weight);
+}
+let added_keys = [];
+function validWord(word){
+  return true;
+}
+
+let alphaSentiment = function(word) {
+  var i;
+  var vowels = ['e','a','i','o','u','y','h','s','w'];
+  let consonants = ['b','c','d','f','g','j','k','l','m','n','p','q','r','t','v','x','z'];
+  let alphaScores = {
+    a: 2, b: 3, c: 3, d: -4, e: 3, f: 0, g: 0, h: 5, i: 3, j: 0, k: 1, l: 5, m: -6, n: 3, o: 7, p: 8, q: 9, r: 2, 
+    s: -4, t: -3, u: -6, v: -4, w: 8, x: -3, y: -2, z: -5,
+    0: 0, 1: 3, 2: 2, 3: 6, 4: -3, 5: 3, 6: -1, 7: -8, 8: 4, 9: 5
+  };
+  var score=0;
+  for( i = 0; i < word.length; i++ ) {
+    score += alphaScores[word[i].toLowerCase()];
+  }
+  if( score == 0 || word.length == 0 /*?*/ /*who knows, these days..*/ ) return 0;
+  score/=word.length;
+  console.log(word,score);
+  return score;
+}
+
+let prepareWord = function(word ) {
+  graph[word].length = word.length;
+  graph[word].commonality = word in commons ? commons[word] : ((word.length)*100);
+
+  if( word in sentiments ) {
+    graph[word].sentiment = sentiments[word][0] + sentiments[word][1] - sentiments[word][2];
+  } else {
+    graph[word].sentiment = (qRandom()*0.5+0.25) * alphaSentiment(word);
+  }
+  graph[word].heat = graph[word].sentiment/30 + graph[word].commonality/1000 + qRandom()*0.5;
+
+  let total_weight=0;
+  for( var w=0; w<graph[word].connections.length; w+=2 ) {
+    let nw = graph[word].connections[w];
+    total_weight += Math.abs(graph[word].connections[w+1]) * graph[word].sentiment; // let's do it that way
+    if( !(nw in graph) ) {
+      added_keys.push(nw);
+      graph[nw] = { connections: [ ], length: nw.length, sentiment: 0.0, commonality: 0.0, definitionClarity: 0.5, binarySum: 0, extraDimensions: [] };
+    }
+    //if( graph[nw].connections.indexOf(word) == -1 )
+    //  addCon(nw,word,graph[word].connections[w+1]);
+  }
+  graph[word].definitionClarity = total_weight;
+};
+/*
+
+            You have reached the dimensional nexus. All around you are pathways to portals leading deeper into the unknown. Where will your journey take you next?
+
+warp pylons activating along with engineering systems and forest elves to help support our deflector array dishes and our nano probe systems and our adaptive shielding technology along with yes some novel navel nacel0 nacel1 nacel2 nacel3 nacel4 nacel5 nacel6 nacel nacel8 nacel9
+accelerator 1 2 3 4 5 6 7 8 9 0
+111 222 333 444 555 666 777 888 999 000
+merlin support and encouragement
+iridescent and imaginal
+s q g w v m x i o p l a
+*/
+function rebuildSystem() {
+
+  var newbuf = [];
+  var word = "";
+
+  rebuildCanvas();
+
+  var s = new Set();
+  for( var i=0; i<savebuffer.length; i++ ) {
+    if( isLetter(savebuffer[i]) ) {
+      word += savebuffer[i];
+    } else {
+      if( word != "" ) {
+        word = word.toLowerCase();
+
+        if( !s.has(word) ) {
+          s.add(word);
+          newbuf.push(word);
+        }
+
+        word = "";
+      }
+    }
+  }
+  if( word != "" ) {
+      word = word.toLowerCase();
+      
+      if( !s.has(word) ) {
+        newbuf.push(word);
+      }
+  }
+  forcemap.data = null;
+  sim_map.links = null;
+  anaLyze(newbuf);
+  setup();
+}
+
+let centerOffset={};
+
+let buildText = function(word) {
+  let geo = new TextGeometry( word, {
+        font: font,
+        size: font_size*vis_scaling,
+        height: font_size/8*vis_scaling,
+        depth: 0.01*vis_scaling,
+        bevelSize: 0.1,
+        bevelThickness: 0.2,
+        bevelEnabled: false
+      } );
+
+  geo.computeBoundingBox();
+  centerOffset[word] = - 0.5 * ( geo.boundingBox.max.x - geo.boundingBox.min.x );
+
+  let c1 = new THREE.Color( .4+heat_factor*graph[word].heat, 0.4, 0.4 );
+  let c2 = new THREE.Color( .4+heat_factor*graph[word].heat, 0.4, 0.4 );
+
+  let materials = [
+          new THREE.MeshPhongMaterial( { color: c1 } ), // front
+          new THREE.MeshPhongMaterial( { color: c2 } ) // side
+        ];
+  let obj = new THREE.Mesh( geo, materials );
+  objects[obj] = word;
+  obj.name = word;
+  return obj;
+}
+
+let rebuildTexts = function() {
+  var i;
+  var kx = Object.keys(texts);
+  objects={};
+  for( i=0; i<kx.length; i++ ) {
+    let word = kx[i];
+    let pos = texts[word].position;
+    let newText = buildText(word);
+    newText.position.set( pos.x, pos.y, pos.z );
+    texts[word].removeFromParent();
+    texts[word] = newText;
+    scene.add(newText);
+  }
+}
+
+let gr_keys = 10;
+
+function setup() {
+
+  let graph_keys = Object.keys(graph);
+  graph_keys.forEach(prepareWord);
+  if( added_keys.length > 0 ) console.log("wtf? how are we adding keys?", added_keys);
+  let key_copy = added_keys.slice();
+  key_copy.forEach(prepareWord);
+
+  if( instances != null )
+      scene.remove(instances);
+
+  geometry = new THREE.BoxGeometry( sizing*vis_scaling, sizing*vis_scaling, sizing*vis_scaling );
+  material = new THREE.MeshLambertMaterial( {color: 0xe3e3e3 } );
+  material.opacity = opacity;
+  material.transparent = true;
+
+  console.log("Drawing graph: " + Object.keys(graph).length + " words.");
+  Object.keys(graph).forEach(word => {
+    if( !(word in nodes) ) {
+      graph[word].ident = nodelist.length;
+      nodelist.push(word);
+    }
+    if( !(word in nodes) || graph[word].isNew ) {
+      nodes[word] = [
+        qRandom() * z_fact * 2 * rez_extent - (z_fact*rez_extent),
+        qRandom() * z_fact * 2 * rez_extent - (z_fact*rez_extent),
+        qRandom() * z_fact * 2 * rez_extent - (z_fact*rez_extent),
+        0,0,0, 0,0,0, 0,0,0, 0, 0, 0,0,0, 0,0,0 ]; // those last 6 are just for spin and are unused at this time :)
+      origin[word] = [0,0,0,0,0,0,0,0,0];
+      graph[word].isNew = false;
+    }
+  });
+
+
+  let old_keys = gr_keys;
+  gr_keys = Object.keys(graph).length;
+  let ratio = gr_keys/old_keys;
+  font_size *= Math.pow(ratio,.5);//300/gr_keys;
+  //font_size *= ratio;
+  sizing *= Math.pow(ratio,.5);
+
+  instances = new THREE.InstancedMesh( geometry, material, nodelist.length );
+  instances.instanceMatrix.setUsage( THREE.DynamicDrawUsage ); // will be updated every frame
+  scene.add(instances);
+
+  texts={};
+  Object.keys(graph).forEach(word => {
+    let node = nodes[word];
+    instances.setMatrixAt( graph[word].ident, new THREE.Matrix4().makeTranslation( (node[0]+node[9])*vis_scaling, (node[1]+node[10])*vis_scaling, (node[2]+node[11])*vis_scaling ) );
+    instances.setColorAt( graph[word].ident, new THREE.Color( .4+heat_factor*graph[word].heat,.4,.4 ) );
+    nodelist.push(word);
+    tMesh = buildText(word);
+
+    let vn = new THREE.Vector3( node[9], node[10], node[11] );
+    vn.normalize();
+
+    let q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(1,0,0), vn);
+
+    tMesh.quaternion.copy(q);
+    //tMesh.rotation.x = 0;
+
+    tMesh.position.x = (node[0] + node[9] + 0.5*sizing + (vn.x * centerOffset[word]))*vis_scaling;
+    tMesh.position.y = (node[1] + node[10] + 0.5*sizing + (vn.y * centerOffset[word]))*vis_scaling;
+    tMesh.position.z = (node[2] + node[11] + 0.5*sizing + (vn.z * centerOffset[word]))*vis_scaling;
+
+    //tMesh.rotation.y = Math.PI * 2;
+    scene.add( tMesh );      
+    texts[word] = tMesh;
+  });
+  instances.instanceColor.needsUpdate = true;
+  instances.instanceMatrix.needsUpdate = true;
+
+  buildEdges();
+
+  last_time[0] = last_time[1] = last_time[2] = null;
+  animdone();
+}
+
+// Create edges
+
+function buildEdges()
+{
+  for( var i=0; i<edges.length; i++ ) {
+    scene.remove(edges[i].line);
+  }
+  edges = [];
+  Object.keys(graph).forEach(word => {
+    for (let i = 0; i < graph[word].connections.length; i += 2) {
+      const connectedWord = graph[word].connections[i];
+      const weight = graph[word].connections[i + 1];
+      const start = nodes[word];
+      const end = nodes[connectedWord];
+
+      const material = new THREE.LineBasicMaterial({ color: weight > 0 ? 0x0000ff : 0xff0000 });
+      material.opacity = line_opacity;
+      material.transparent = true;
+      const points = [];
+      points.push(new THREE.Vector3((start[0]+start[9])*vis_scaling, (start[1]+start[10])*vis_scaling, (start[2]+start[11])*vis_scaling));
+      points.push(new THREE.Vector3((end[0]+start[9])*vis_scaling, (end[1]+start[10])*vis_scaling, (end[2]+end[11])*vis_scaling));
+      let geometry = new THREE.BufferGeometry().setFromPoints(points);
+      let line = new THREE.Line(geometry, material);
+      scene.add(line);
+      var cw;
+      cw = ( graph[word].sentiment + graph[connectedWord].sentiment ) / 2;
+      /*
+      cw = ( graph[word].sentiment > 0 && graph[connectedWord].sentiment > 0 ) ? ( graph[word].sentiment + graph[connectedWord].sentiment ) :
+        -( Math.abs(graph[word].sentiment) + Math.abs(graph[connectedWord].sentiment) );
+      */
+      if( cw > 1 ) cw = 1;
+      if( cw < -1 ) cw = -1;
+      edges.push({ line, weight, start: word, end: connectedWord, connweight: cw });
+    }
+  });
+  console.log(edges.length + " edges.");  
+}
+/*
+mom said the crows were fletching soon
+that means there will be plenty of time to eat crow
+so what do you suppose squirrels should do in the middle of the night
+steal the easter eggs from the crows' nests
+*/
+
+let last_time = [null,null,null], last_tick = null;
+
+let totalSpeed = 0;
+let lengths = {};
+
+// for adding random words, we could use a map like this to plot the words in n dimensions:
+let sim_map = {
+  links: null,
+  linkwidth: 0.125, // ratio? is it a , factor? a portion perhaps protion? potion? well it's not a per cent, so what is it, per?
+  fmsize: 50, // it's definitely not a "percentage" don't just keep adding words! now we're getting OLD
+  dimsizes: [ 1000000, 2 ], // clarify? ugh. we multiply it here... *linkwidth to get =realwidth
+  dimfacts: [ 0.00005, 50 ],
+  dimtypes: [ 1, 0 ], // 0=static, 1=dynamic dimsize/facts, 2=?...
+  dims: { sentiment: 1, commonality: 0 }, //, evidence: 2+Infinity
+  dimlen: null,
+
+  coord(n, dim) {
+    return Math.min( this.fmsize-1, Math.abs(parseInt(n*this.dimfacts[dim])) );
+  },
+
+  n_dist( a, b ) {
+    var sum=0, d;
+    for( var k in this.dims ) {
+      d = Math.abs( graph[a][k] - graph[b][k] ) / this.dimsizes[this.dims[k]];
+      sum += d*d;
+    }
+    return Math.sqrt(sum);
+  },
+
+  report() {
+    let Q = [this.links, ""], max = 0;
+    let result = "";
+    while( Q.length > 0 ) {
+      l = Q.shift();
+      h = Q.shift();
+      for( i=0; i<l.length; i++ ) {
+        if( typeof l[i] == 'string' ) {
+          if( result != "" ) result += ", ";
+          if( result != "" && i == 0 ) result += "\n";
+          result += h + ": " + l[i];
+        } else {
+          Q.unshift(h==""?i:(h+","+i));
+          Q.unshift(l[i]);
+        }
+      }
+    }
+    return result;
+  },
+
+  calculateSize() {
+    var i, l,layer;
+    let Q = [this.links,0], max = 0;
+    let newfacts=new Array(this.dimlen).fill(0);
+    var dim;
+
+    while( Q.length > 0 ) {
+      l = Q.shift();
+      layer = Q.shift();
+
+      if( layer == this.dimlen ) {
+        for( var k in this.dims ) {
+          dim = this.dims[k];
+          for( i=0; i<l.length; i++ ) {
+            if( typeof l[i] == 'undefined' ) continue;
+            if( !(l[i] in graph) || ( typeof graph[l[i]] == 'undefined' ) ) {
+              console.log("hi");
+            }
+            if( graph[ l[i] ][k] > newfacts[ dim ] ) {
+              newfacts[ dim ] = graph[ l[i] ][k];
+            }
+          }
+        }
+      } else {
+        for( i=0; i<l.length; i++ ) {
+          Q.unshift(layer+1);
+          Q.unshift(l[i]);
+        }
+      }
+    }
+    for( i=0; i<newfacts.length; i++ ) {
+      if( this.dimtypes[i] == 1 ) {
+        this.dimsizes[i] = 0+newfacts[i];
+        newfacts[i] = this.fmsize / newfacts[i];
+      } else {
+        newfacts[i] = this.dimfacts[i];
+      }
+    }
+    this.dimfacts = newfacts;
+    this.update();
+  },
+
+  init_data() {
+    if( this.dimlen === null ) {
+      this.dimlen = Object.keys(this.dims).length;
+    }
+    if( this.links === null ) {
+      let arra = new Array();
+      this.links = new Array(this.fmsize).fill(null);
+      arra.push([]);
+      for( var x=0; x<this.fmsize; x++ ) {
+        this.links[x]=[];
+        arra[0].push(this.links[x]);
+      }
+      for( i=1; i<this.dimlen; i++ ) {
+        arra.push(ptr3=[]);
+        ptr = arra[i-1];
+        for( y=0; y<ptr.length;y++ ) {
+          ptr2 = ptr[y];
+          for( x=0; x<this.fmsize; x++ ) {
+            ptr2.push([]);
+            ptr3.push(ptr2[x]);
+          }
+        }
+      }
+    }    
+  },
+
+  add_word( word ) {
+    this.init_data();
+
+    let l = this.links, coords = new Array(this.dimlen).fill(0);
+    for( var key in this.dims ) coords[ this.dims[key] ] = this.coord(graph[word][key], this.dims[key]);
+
+    var i;
+    for( i=0; i<this.dimlen-1; i++ ) {
+      l = l[ coords[i] ];
+    }
+    if( l[coords[i]].indexOf(word) == -1 )
+      l[ coords[i] ].push( word );
+  },
+
+  update: function() {
+    let Q = [this.links], max = 0;
+    let masterlist=[];
+    while( Q.length > 0 ) {
+      l = Q.shift();
+      for( i=0; i<l.length; i++ ) {
+        if( typeof l[i] == 'string' ) {
+          masterlist.push( l[i] );
+        } else {
+          Q.unshift(l[i]);
+        }
+      }
+    }
+    this.links = null;
+    while( masterlist.length > 0 ) this.add_word( masterlist.shift() );
+  },
+
+  con_word( word ) {
+    var ptr,ptr2,ptr3;
+    var x,i,y;
+    var max_links=26;
+
+    if( this.links === null )
+      return [];
+
+    var coords = new Array(this.dimlen).fill(0);
+    let lims = new Array(this.dimlen).fill(0);
+    for( var key in this.dims ) {
+      let dim = this.dims[key]
+      let val = graph[word][key];
+
+      coords[ dim ] = this.coord( Math.abs(val), dim );
+      lims[ dim ] = this.coord( this.dimsizes[ dim ] * this.linkwidth, dim );
+    }
+
+    // iterate through each layer of idx, reading from 'links'
+    let Q = [this.links,0];
+    var layer,ep,sp,l,dist;
+
+    let return_links = [];
+    var idx = new Array(this.dimlen).fill(0);
+    while( Q.length > 0 ) {
+      l = Q.shift();
+      layer = Q.shift();
+      sp = Math.max(0, coords[layer] - lims[layer]);
+      ep = Math.min(coords[layer] + lims[layer], l.length-1);
+
+      // calculate connections within this.linkwidth and add them to a return value list
+      if( layer == this.dimlen ) {
+        for( i=0; i<l.length; i++ ) {
+          dist = this.linkwidth - this.n_dist(word,l[i]);
+          if( dist > 0 )
+            return_links.push( [l[i],dist/this.linkwidth] );
+        }
+      } else {
+        for( i=sp; i<=ep; i++ ) {
+          Q.unshift(layer+1);
+          Q.unshift(l[i]);
+        }
+      }
+    }
+
+    return_links.sort( (a,b) => (b[1]-a[1]) );
+    if( return_links.length > max_links ) {
+      while( return_links.length > max_links ) return_links.pop();
+    }
+    var rl = [];
+    for( var i=0; i<return_links.length; i++ ) {
+      rl.push( return_links[i][0], return_links[i][1]);
+    }
+    return rl;
+  }
+};
+
+
+let forcemap = {
+  data: null,
+  heat: null,
+  insize: 10,
+  fmsize: 20,
+  fmfact: 20/max_coord_end,
+  count: 0,
+  changed: false,
+
+  coord: function(n) {
+    return Math.min( this.fmsize-1, Math.abs(parseInt(n*this.fmfact)) );
+  },
+
+  calculateSize: function() {
+    let max=0;
+    for( var word in nodes ) {
+      max = Math.max( Math.abs(nodes[word][0]+nodes[word][9]),
+                      Math.abs(nodes[word][1]+nodes[word][10]),
+                      Math.abs(nodes[word][2]+nodes[word][11]) );
+    }
+    if( max < 200 ) max = 200;
+    this.fmfact = this.fmsize/max;
+    this.update();
+  },
+
+  getheat: function(word){
+    let result = 0.0;
+    if( this.heat === null )
+      return result;
+
+    let x = nodes[word][0]+nodes[word][9], y = nodes[word][1]+nodes[word][10], z = nodes[word][2]+nodes[word][11];
+    var v1 = new THREE.Vector3( x, y, z );
+    let fmx = this.coord(x), fmy = this.coord(y), fmz = this.coord(z), lim = this.coord(inside_envelope*0.5);
+    let x0 = Math.max(0, fmx - lim);
+    let y0 = Math.max(0, fmy - lim);
+    let z0 = Math.max(0, fmz - lim);
+    let x1 = Math.min(this.fmsize-1, fmx + lim);
+    let y1 = Math.min(this.fmsize-1, fmy + lim);
+    let z1 = Math.min(this.fmsize-1, fmz + lim);
+
+    for( var X = x0; X<=x1; X++ ) {
+      for( var Y = y0; Y<=y1; Y++ ) {
+        for( var Z = z0; Z<=z1; Z++ ) {
+          let lst = this.heat[X][Y][Z];
+          if( lst === null ) continue;
+          for( var i=0; i<this.insize; i++ ) {
+            var sl1 = lst[i];
+            for( var j=0; j<this.insize; j++ ) {
+              var sl2 = sl1[j];
+              for( var k=0; k<this.insize; k++ ) {
+                result += sl2[k];
+              }
+            }
+          }
+        }
+      }
+    }
+    return result;
+  },
+
+  getforce: function(word){
+    if( this.data === null ) {
+      return [0,new THREE.Vector3()];
+    }
+    let x = nodes[word][0]+nodes[word][9], y = nodes[word][1]+nodes[word][10], z = nodes[word][2]+nodes[word][11];
+    let fmx = this.coord(x), fmy = this.coord(y), fmz = this.coord(z);
+
+    let result = new THREE.Vector3();
+
+    //inside_envelope *= inside_envelope;
+    //outside_envelope *= outside_envelope;
+    //target_space *= target_space;
+    var v1 = new THREE.Vector3( x, y, z );
+    var x0,y0,z0,x1,y1,z1;
+    let lim = this.coord(outside_envelope*0.501);
+    x0 = fmx - lim; y0 = fmy - lim; z0 = fmz - lim;
+    x1 = fmx + lim; y1 = fmy + lim; z1 = fmz + lim;
+    if( x0 < 0 ) x0 = 0;
+    if( y0 < 0 ) y0 = 0;
+    if( z0 < 0 ) z0 = 0;
+    if( x1 > this.fmsize-1 ) x1 = this.fmsize-1;
+    if( y1 > this.fmsize-1 ) y1 = this.fmsize-1;
+    if( z1 > this.fmsize-1 ) z1 = this.fmsize-1;
+
+    let match_count=0;
+    for( var X = x0; X<=x1; X++ ) {
+      for( var Y = y0; Y<=y1; Y++ ) {
+        for( var Z = z0; Z<=z1; Z++ ) {
+          let lst = this.data[X][Y][Z];
+          for( var i=0; i<lst.length; i++ ) {
+            let w2 = lst[i].word;
+            if( w2 == word ) continue;
+            if( !(w2 in nodes) ) {
+              console.log("Missing word: " + w2);
+              continue;
+            }
+            let node = nodes[w2];
+            let w2x = node[0]+node[9], w2y = node[1]+node[10], w2z = node[2]+node[11];
+            var v2 = new THREE.Vector3( w2x, w2y, w2z );
+            let d = dist(word,w2);
+            var x2;
+
+            if( d >= outside_envelope || d <= 0 ) continue; // positive x2 = move word towards w2
+            if( w2 in graph[word].connections ) {
+              x2 = d - target_space;
+            } else {
+              x2 = outside_envelope - d;
+            }
+
+
+            let v = v2.sub(v1);
+            v.normalize();
+
+            result.x += v.x*x2;
+            result.y += v.y*x2;
+            result.z += v.z*x2;
+            match_count++;
+            if( match_count > max_matches ) break;
+          }
+          if( match_count > max_matches ) break;
+        }
+        if( match_count > max_matches ) break;
+      }
+      if( match_count > max_matches ) break;
+    }
+    return [match_count,result];
+  },
+  update: function(){
+    if( this.data === null ) {
+      this.data=new Array(this.fmsize).fill(null);
+      for( var i=0; i<this.fmsize; i++ ) {
+        this.data[i] = new Array(this.fmsize).fill(null);
+        for( var j=0; j<this.fmsize; j++ ) {
+          this.data[i][j] = new Array(this.fmsize).fill(null);
+          for( var k=0; k<this.fmsize; k++ ) {
+            this.data[i][j][k] = [];
+          }
+        }
+      }
+      this.changed=true;
+    }
+
+    let disp=new Array(this.fmsize).fill(null);
+    for( i=0; i<this.fmsize; i++ ) {
+      disp[i] = new Array(this.fmsize).fill(null);
+      for( j=0; j<this.fmsize; j++ ) {
+        disp[i][j] = new Array(this.fmsize).fill(null);
+        for( k=0; k<this.fmsize; k++ ) {
+          disp[i][j][k] = 0;
+        }
+      }
+    }
+    if( this.heat !== null ) {
+      var i,j,k,I,J,K;
+
+      for( i=0; i<this.fmsize; i++ ) {
+        for( j=0; j<this.fmsize; j++ ) {
+          for( k=0; k<this.fmsize; k++ ) {
+            disp[i][j][k] = (1-heat_loss) * this.heat[i][j][k];
+            for( I=-1; I<2; I++ ) {
+              if( I+i < 0 || I+i >= this.fmsize ) continue;
+              for( J=-1; J<2; J++ ) {
+                if( ( I != 0 ) && ( J != 0 ) ) continue;
+                if( J+j < 0 || J+j >= this.fmsize ) continue;
+                for( K=-1; K<2; K++ ) {
+                  if( ( ( I != 0 ) || ( J != 0 ) ) && ( K != 0 ) ) continue;
+                  if( K+k < 0 || K+k >= this.fmsize ) continue;
+                  disp[i][j][k] += heat_diffuse * this.heat[i+I][j+J][k+K];
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    this.heat=disp;
+    if( this.changed ) {
+      this.changed = false;
+      this.calculateSize();
+    }
+    for( var word in nodes ) {
+      this.move( word );
+    }
+  },
+  remove: function(word,olx=null,oly=null,olz=null){
+    let node = nodes[word];
+    if( olx === null ) {
+      olx = origin[word][0];
+      oly = origin[word][1];
+      olz = origin[word][2];
+    }
+    var lst = this.data[olx][oly][olz];
+    var item = false;
+    for( var i=0; i<lst.length; i++ ) {
+      if( lst[i].word == word ) {
+        item = lst[i];
+        lst.splice(i,1);
+        break;
+      }
+    }
+
+/*
+    if( item !== false && this.heat !== null ) {
+      graph[word].heat += heat_spread * this.heat[olx][oly][olz];
+      this.heat[olx][oly][olz] *= (1-this.heat_spread);
+    }*/
+
+    return item;
+  },
+  move: function(word){
+    let node = nodes[word];
+    let fmx = this.coord(node[0]+node[9]), fmy = this.coord(node[1]+node[10]), fmz = this.coord(node[2]+node[11]);
+    let item = this.remove(word);
+    if( item === false ) {
+      item = { word: word, strength: 1 };
+      this.count++;
+    }
+    this.data[fmx][fmy][fmz].push(item);
+    let heat_absorbed = heat_spread * 2 * graph[word].heat;
+    this.heat[fmx][fmy][fmz] += heat_absorbed;
+    graph[word].heat -= heat_absorbed;
+
+    origin[word][0] = fmx;
+    origin[word][1] = fmy;
+    origin[word][2] = fmz;
+  }
+};
+
+function dist2(w0,w1) {
+  let e0 = graph[w0].extraDimensions, e1 = graph[w1].extraDimensions;
+  let x0 = nodes[w0][0] + nodes[w0][9];
+  let y0 = nodes[w0][1] + nodes[w0][10];
+  let z0 = nodes[w0][2] + nodes[w0][11];
+
+  let x1 = nodes[w1][0] + nodes[w1][9];
+  let y1 = nodes[w1][1] + nodes[w1][10];
+  let z1 = nodes[w1][2] + nodes[w1][11];
+
+  var i, j, sum=0;
+  var d, max_dist=2*max_coord_end;
+  var len, d;
+  len = Math.max(e0.length,e1.length) + 3;
+
+  for( i=0; i<len; i++ ) {
+    let a = (i==len-3?x0:(i==len-2?y0:(i==len-1?z0:(i>=e0.length?0:e0[i]))));
+    let b = (i==len-3?x1:(i==len-2?y1:(i==len-1?z1:(i>=e1.length?0:e1[i]))));
+    d = Math.min( max_dist, Math.abs( a - b ) );
+    sum += d*d;
+  }
+  return Math.sqrt(sum);
+}
+
+function dist(w0,w1) {
+  if( operational_stage > 0 ) {
+    return dist2(w0,w1);
+  }
+  if( !(w0 in graph) || !(w1 in graph) ) {
+    console.log("missing one",w0,w1);
+    return Infinity;
+  }
+  let e0 = graph[w0].extraDimensions, e1 = graph[w1].extraDimensions;
+  let x0 = nodes[w0][0] + nodes[w0][9];
+  let y0 = nodes[w0][1] + nodes[w0][10];
+  let z0 = nodes[w0][2] + nodes[w0][11];
+
+  let x1 = nodes[w1][0] + nodes[w1][9];
+  let y1 = nodes[w1][1] + nodes[w1][10];
+  let z1 = nodes[w1][2] + nodes[w1][11];
+
+  var i, j, sum=0;
+  var d, max_dist=2*max_coord_end;
+  var len, d1, d2;
+  len = Math.max(e0.length,e1.length) + 3;
+
+  for( i=0; i<len; i++ ) {
+    let a = (i==len-3?x0:(i==len-2?y0:(i==len-1?z0:(i>=e0.length?0:e0[i]))));
+    let b = (i==len-3?x1:(i==len-2?y1:(i==len-1?z1:(i>=e1.length?0:e1[i]))));
+    d1 = Math.min( max_dist, Math.abs( a - b ) );
+
+    sum += d1;
+
+    j=i+1;
+    if( j >= len ) break;
+
+    let e = (j==len-3?x0:(j==len-2?y0:(j==len-1?z0:(j>=e0.length?0:e0[j]))));
+    let f = (j==len-3?x1:(j==len-2?y1:(j==len-1?z1:(j>=e1.length?0:e1[j]))));
+    d2 = Math.min( max_dist, Math.abs( e - f ) );
+
+    let d3 = Math.abs(d2 - d1);
+    if( d2 > d1 ) {
+      let swap = d1;
+      d1 = d2;
+      d2 = swap;
+    }
+
+    if( d3 <= 0.25*d1 ) { // 10,8 => 100+64 => 164 => 12
+      sum -= 2 * Math.sqrt(d1); // 10 => 3.16
+    }
+/*
+Well, theoretically speaking, locating words in an n-dimensional system of meaning is like trying to find a needle in a haystack, if the haystack were a multi-dimensional cosmic labyrinth and the needle was a word with a penchant for playing hide-and-seek.
+
+
+Oh, the Interstitial Diplomat Problem! That's a tricky one. It's like trying to find a needle in a haystack, but the needle is made of smoke and the haystack is made of fog.
+It would be like trying to solve a Rubik's Cube blindfolded, while riding a unicycle, and juggling flaming torches. But hey, no one said diplomacy was easy!
+
+*/
+      //sum -= Math.ceil( 8 * d2 * (5*(d2/d1));
+  }
+
+  return sum;
+}
+
+const projectTo3D = (node) => {
+  const extraDimensions = graph[node].extraDimensions;
+  if (extraDimensions.length > 0) {
+    let eli5 = extraDimensions.length - 1;
+    let p=v=x=y=z=0
+    while( p < eli5+1 ) {
+      switch( rx[v][0] ) {
+        case 0:
+          z += extraDimensions[p];
+          break;
+        case 2:
+          y += extraDimensions[p];
+          break;
+        case 1:
+          x += extraDimensions[p];
+          break;
+      }
+      v = (v+1)%3;
+      p++;
+    }
+    nodes[node][9] = x;
+    nodes[node][10] = y;
+    nodes[node][11] = z;
+  }
+};
+
+let projection_amt=0, dimension_amt;
+const addDimension = (node, tensionLevel) => {
+  while( tensionLevel > 0 ) {
+    let val = 2 * qRandom() * spacelen - spacelen;
+    let v = Math.floor( 3 * qRandom() );
+    val = val + ( val>0?minspace:-minspace );
+    // try to find an earlier 0 dimension
+    for( var z=0; z<graph[node].extraDimensions.length; z++ ) {
+      if( (z%3) == v && graph[node].extraDimensions[z] == 0 ) {
+        graph[node].extraDimensions[z] += val;
+      }
+    }
+    if( v != 0 )
+      graph[node].extraDimensions.push(0);
+    if( v == 2 )
+      graph[node].extraDimensions.push(0);
+    graph[node].extraDimensions.push(val);
+    if( v != 2 )
+      graph[node].extraDimensions.push(0);
+    if( v == 0 )
+      graph[node].extraDimensions.push(0);
+
+    tensionLevel--;
+  }
+};
+
+const increaseTension = (node, levels) => {
+  let dims = graph[node].extraDimensions;
+  var n,v;
+
+  levels = Math.min(dims.length, levels);
+  while(levels > 0) {
+    n = Math.floor(qRandom()*dims.length);
+    let q = n;
+    while( dims[n] == 0 ) {
+      n = (n+1)%dims.length;
+      if( q == n ) return;
+    }
+    v = n % 3;
+    switch( rx[v][0] ) {
+      case 0:
+        node[2] += dims[n];
+        break;
+      case 2:
+        node[1] += dims[n];
+        break;
+      case 1:
+        node[0] += dims[n];
+        break;
+    }
+    dims[n] = 0;
+    let lastgood=-1;
+    for( var i=0; i < dims.length; i++ ) {
+      if( dims[i] != 0 ) lastgood=i;
+      if( i-lastgood >= 3 ) {
+        dims.splice(lastgood+1,3);
+        i-=3;
+      }
+    }
+    levels--;
+  }
+};
+
+const springForce = (k, target_distance, a, b) => {
+  let na = nodes[a], nb = nodes[b];
+  let distance = target_distance - dist(a,b);
+  let dir = new THREE.Vector3( (nb[0]+nb[9]) - (na[0]+na[9]), (nb[1]+nb[10]) - (na[1]+na[10]), (nb[2]+nb[11]) - (na[2]+na[11]) );
+  dir.normalize();
+  return dir.multiplyScalar(k * distance);
+};
+
+function animate(time_now) {
+  accSimulator(time_now);
+  velSimulator(time_now);
+  posSimulator(time_now);
+  requestAnimationFrame(render);
+  //render();
+
+  if( gravTimeout > 5000 )
+    console.log("gt="+gravTimeout);
+
+}
+
+function posSimulator(time_now)
+{
+  var td;
+  if( last_time[k_pos] == null ) {
+    last_time[k_pos] = time_now;
+    td = 1/sim_fps[k_pos];
+  } else {
+    td = ( time_now - last_time[k_pos] ) / 1000.0;
+    if( td < 1/sim_fps[k_pos] ) // eg, 60 fps simulation.
+      return;
+    last_time[k_pos] += td*1000;
+  }
+  if( td > .75 ) td = 0.5;
+
+  if( frame_count[k_pos] + td*fps_ratio_inc[k_pos] > drift_allowance[k_pos] ) return;
+  frame_count[k_pos] += td * fps_ratio_inc[k_pos];
+
+  let xp=0,yp=0,zp=0;
+  let xv=0,yv=0,zv=0;
+  var p,rep;
+  Object.keys(graph).forEach(word => { // apply velocity and other rules(border->velocity, drag) to position
+    let node = nodes[word];
+
+    if( node[6] > max_vel ) node[6] = max_vel; // final velocity enforcement
+    if( node[6] < -max_vel ) node[6] = -max_vel;
+    if( node[7] > max_vel ) node[7] = max_vel;
+    if( node[7] < -max_vel ) node[7] = -max_vel;
+    if( node[8] > max_vel ) node[8] = max_vel;
+    if( node[8] < -max_vel ) node[8] = -max_vel;
+
+    let dynamic_factor = node[12]/max_matches;
+
+    let xv = node[6] * td * vel_scale * 2 * (1.01-dynamic_factor);
+    let yv = node[7] * td * vel_scale * 2 * (1.01-dynamic_factor);
+    let zv = node[8] * td * vel_scale * 2 * (1.01-dynamic_factor);
+
+    if( xv > max_move ) xv = max_move;//this should be interesting for your cpu lmao
+    if( yv > max_move ) yv = max_move;
+    if( zv > max_move ) zv = max_move;
+
+    node[0] += xv;
+    node[1] += yv;
+    node[2] += zv;
+
+    node[0] = Math.min( max_coord_end, Math.max( -max_coord_end, node[0] ) );
+    node[1] = Math.min( max_coord_end, Math.max( -max_coord_end, node[1] ) );
+    node[2] = Math.min( max_coord_end, Math.max( -max_coord_end, node[2] ) );
+    node[9] = Math.min( max_coord_end, Math.max( -max_coord_end, node[9] ) );
+    node[10] = Math.min( max_coord_end, Math.max( -max_coord_end, node[10] ) );
+    node[11] = Math.min( max_coord_end, Math.max( -max_coord_end, node[11] ) );
+
+    let zx = Math.abs(node[0]+node[9]) - max_coord_start; // border enforcement of velocity:
+    let zy = Math.abs(node[1]+node[10]) - max_coord_start;
+    let zz = Math.abs(node[2]+node[11]) - max_coord_start;
+
+    if( zx > 0 ) {
+      if( zx > max_coord_dist ) {
+        node[0] = ((node[0]+node[9])>0?0.9:-0.9) * ( max_coord_end - node[9] );
+        node[6] *= -0.25;
+      } else {
+        node[6] -= td * node[6] * 0.3 * zx / ( max_coord_dist );
+      }
+    }
+    if( zy > 0 ) {
+      if( zy > max_coord_dist ) {
+        node[1] = ((node[1]+node[10])>0?0.9:-0.9) * ( max_coord_end - node[10] );
+        node[7] *= -0.25;
+      } else {
+        node[7] -= td * node[7] * 0.3 * zy / ( max_coord_dist );
+      }
+    }
+    if( zz > 0 ) {
+      if( zz > max_coord_dist ) {
+        node[2] = ((node[2]+node[11])>0?0.9:-0.9) * ( max_coord_end - node[11] );
+        node[8] *= -0.25;
+      } else {
+        node[8] -= td * node[8] * 0.3 * zz / ( max_coord_dist );
+      }
+    }
+      
+    xp += node[0]/gr_keys; // record position for adjustment:
+    yp += node[1]/gr_keys;
+    zp += node[2]/gr_keys;
+    xv += node[6]/gr_keys; // record velocity for adjustment:
+    yv += node[7]/gr_keys;
+    zv += node[8]/gr_keys;
+  });
+
+  for( var word in nodes ) {
+    let node=nodes[word];
+
+    if( !(word in graph) ) {
+      delete nodes[word];
+      continue;
+    }
+    node[0] -= xp; node[1] -= yp; node[2] -= zp;
+    node[6] -= xv; node[7] -= yv; node[8] -= zv;
+
+    // update positions:
+    instances.setMatrixAt( graph[word].ident, new THREE.Matrix4().makeTranslation( (node[0]+node[9])*vis_scaling, (node[1]+node[10])*vis_scaling, (node[2]+node[11])*vis_scaling ) );
+    instances.setColorAt( graph[word].ident, new THREE.Color( .4+heat_factor*graph[word].heat,.4,.4 ) );
+
+    if( !(word in texts) || isNaN(node[0]) || isNaN(node[1]) || isNaN(node[2]) ) {
+      console.log("wtf word should be in texts: ", word, node);
+      throw "error";
+    }
+
+    let vn = new THREE.Vector3( node[9], node[10], node[11] );
+    vn.normalize();
+    
+    let q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(1,0,0), vn);
+
+    texts[word].quaternion.copy(q);
+    //tMesh.rotation.x = 0;
+
+    let c1 = new THREE.Color( .4+heat_factor*graph[word].heat, .4,.4 );
+    let c2 = new THREE.Color( .4+heat_factor*graph[word].heat, .4,.4 );
+
+    //texts[word].material[0] = new THREE.MeshPhongMaterial( { color: c1 } );
+    //texts[word].material[1] = new THREE.MeshPhongMaterial( { color: c2 } );
+    texts[word].material[0].color = c1;
+    texts[word].material[1].color = c2;
+
+    texts[word].position.x = (node[0] + node[9] + 0.5*sizing + (vn.x * centerOffset[word]))*vis_scaling;
+    texts[word].position.y = (node[1] + node[10] + 0.5*sizing + (vn.y * centerOffset[word]))*vis_scaling;
+    texts[word].position.z = (node[2] + node[11] + 0.5*sizing + (vn.z * centerOffset[word]))*vis_scaling;
+  }
+
+  instances.instanceColor.needsUpdate=true;
+
+  // finalize:    
+  //camera.position.set( camera.position.x - xp, camera.position.y - yp, camera.position.z - zp );
+  //controls.target =new THREE.Vector3(xp,yp,zp);
+
+  forcemap.changed = true;
+}
+
+function velSimulator(time_now)
+{
+  var td;
+  if( last_time[k_vel] == null ) {
+    last_time[k_vel] = time_now;
+    td = 1/sim_fps[k_vel];
+  } else {
+    td = ( time_now - last_time[k_vel] ) / 1000.0;
+    if( td < 1/sim_fps[k_vel] ) // eg, 60 fps simulation.
+      return;
+    last_time[k_vel] += td*1000;
+  }
+  if( td > .75 ) td = 0.5;
+
+  if( frame_count[k_pos] - td*fps_ratio_dec[k_pos] < -drift_allowance[k_pos] ) return;
+  if( frame_count[k_vel] + td*fps_ratio_inc[k_vel] > drift_allowance[k_vel] ) return;
+  frame_count[k_pos] -= td * fps_ratio_dec[k_pos];
+  frame_count[k_vel] += td * fps_ratio_inc[k_vel];
+
+
+  var node,rep,dynamic_factor;
+  let drag_fact = Math.pow( drag_factor, td );
+
+  if( drag_fact < 0.0001 || drag_fact > 1 ) {
+    console.log("DF: " + drag_fact);
+  }
+
+  total_vel = 0;
+  let top_vel = 0;
+  let min_vel = Infinity;
+
+  Object.keys(graph).forEach(word => { // apply acceleration to velocity
+    node = nodes[word];
+    dynamic_factor = 1.1 - node[12]/max_tension; // how much of the network we're directly being affected by (congestion)
+    if( dynamic_factor < 0.1 ) dynamic_factor=0.1;
+    rep=0;
+
+    if( node[3] > max_acc ) node[3] = max_acc; // final velocity enforcement
+    if( node[3] < -max_acc ) node[3] = -max_acc;
+    if( node[4] > max_acc ) node[4] = max_acc;
+    if( node[4] < -max_acc ) node[4] = -max_acc;
+    if( node[5] > max_acc ) node[5] = max_acc;
+    if( node[5] < -max_acc ) node[5] = -max_acc;
+
+
+    node[6] += node[3] * td * acc_scale * dynamic_factor;
+    node[7] += node[4] * td * acc_scale * dynamic_factor;
+    node[8] += node[5] * td * acc_scale * dynamic_factor;
+
+    top_vel = Math.max(top_vel, node[3]*acc_scale*dynamic_factor, node[4]*acc_scale*dynamic_factor, node[5]*acc_scale*dynamic_factor);
+    if( node[3] != 0 )
+      min_vel = Math.min(min_vel, node[3]*acc_scale*dynamic_factor);
+    if( node[4] != 0 )
+      min_vel = Math.min(min_vel, node[4]*acc_scale*dynamic_factor);
+    if( node[5] != 0 )
+      min_vel = Math.min(min_vel, node[5]*acc_scale*dynamic_factor);
+
+    node[6] -= node[6]*drag_fact;
+    node[7] -= node[7]*drag_fact;
+    node[8] -= node[8]*drag_fact;
+
+    node[6] = Math.min( (max_coord_end-(node[0]+node[9])), Math.max( -(max_coord_end-(node[0]+node[9])), node[6] ) );
+    node[7] = Math.min( (max_coord_end-(node[1]+node[10])), Math.max( -(max_coord_end-(node[1]+node[10])), node[7] ) );
+    node[8] = Math.min( (max_coord_end-(node[2]+node[11])), Math.max( -(max_coord_end-(node[2]+node[11])), node[8] ) );
+
+/*
+    p=Math.abs(node[0]+node[9]+node[6]);
+    if( p > max_coord_start ) {
+      if( p > max_coord_end ) {
+        node[0] = max_coord_end - (node[9]+node[6]);
+        p = max_coord_end;
+      }
+      p -= max_coord_start;
+      rep += p;
+    }
+
+    p=Math.abs(node[1]+node[10]+node[7]);
+    if( p > max_coord_start ) {
+      if( p > max_coord_end ) {
+        node[1] = max_coord_end - (node[10]+node[7]);
+        p = max_coord_end;
+      }
+      p -= max_coord_start;
+      rep += p;
+    }
+
+    p=Math.abs(node[2]+node[11]+node[8]);
+    if( p > max_coord_start ) {
+      if( p > max_coord_end ) {
+        node[2] = max_coord_end - (node[11]+node[8]);
+        p = max_coord_end;
+      }
+      p -= max_coord_start;
+      rep += p;
+    }
+
+
+    rep *= -border_force*td;
+    if( rep != 0 ) {
+      let pos = new THREE.Vector3( node[0], node[1], node[2] );
+      pos.normalize();
+
+      node[6] += -rep*(pos.x)*td;
+      node[7] += -rep*(pos.y)*td;
+      node[8] += -rep*(pos.z)*td;
+    }
+    */
+
+    if( node[6] > max_vel ) node[6] = max_vel; // final velocity enforcement
+    if( node[6] < -max_vel ) node[6] = -max_vel;
+    if( node[7] > max_vel ) node[7] = max_vel;
+    if( node[7] < -max_vel ) node[7] = -max_vel;
+    if( node[8] > max_vel ) node[8] = max_vel;
+    if( node[8] < -max_vel ) node[8] = -max_vel;
+
+    total_vel += (Math.abs(node[6])+Math.abs(node[7])+Math.abs(node[8]));
+  });
+
+  if( top_vel > vel_limiter ) { // automatic velocity squisher
+    let vel_range = top_vel-min_vel;
+    let vel_top_tgt = vel_limiter;
+    let vel_min_tgt = min_vel * ( vel_limiter / top_vel );
+    let vel_range_tgt = vel_top_tgt - vel_min_tgt;
+    let vel_refactor = (vel_range_tgt / vel_range);
+
+    Object.keys(graph).forEach(word => { // apply acceleration to velocity
+      node = nodes[word];
+      if( node[6] != 0 ) node[6] = vel_min_tgt + (node[6]-min_vel)*vel_refactor;
+      if( node[7] != 0 ) node[7] = vel_min_tgt + (node[7]-min_vel)*vel_refactor;
+      if( node[8] != 0 ) node[8] = vel_min_tgt + (node[8]-min_vel)*vel_refactor;
+    });
+  }
+
+  if( operational_stage == 0 && total_vel <= gr_keys*max_vel*0.09 ) {
+    console.log("total_vel=" + total_vel + ", switch to stage 1");
+    operational_stage = 1;
+  }
+}
+
+function accSimulator(time_now)
+{
+  var td;
+  if( last_time[k_acc] == null ) {
+    last_time[k_acc] = time_now;
+    td = 1/sim_fps[k_acc];
+  } else {
+    td = ( time_now - last_time[k_acc] ) / 1000.0;
+    if( td < 1/sim_fps[k_acc] ) // eg, 60 fps simulation.
+      return;
+    last_time[k_acc] += td*1000;
+  }
+  if( td > .75 ) td = 0.5;
+
+  if( frame_count[k_vel] - td*fps_ratio_dec[k_vel] < -drift_allowance[k_vel] ) return;
+  frame_count[k_vel] -= td * fps_ratio_dec[k_vel];
+
+
+  var node,grav,tens_down;
+  forcemap.update();
+
+  Object.keys(graph).forEach(word => { // store the old acceleration and calculate current starting velocity from gravity
+    node = nodes[word];
+
+    origin[word][3] = node[3];//+node[9];
+    origin[word][4] = node[4];//+node[10];
+    origin[word][5] = node[5];//+node[11];
+    //origin[word][6] = td;
+
+    [node[12],grav] = forcemap.getforce(word);
+    node[12] -= graph[word].connections.length/2;
+    if( Math.abs(grav.x) + Math.abs(grav.y) + Math.abs(grav.z) < node[12] ) {
+      //console.log("Low gravity: ", grav);
+    }
+    nodes[word][3] = grav.x*-rep_scale;
+    nodes[word][4] = grav.y*-rep_scale;
+    nodes[word][5] = grav.z*-rep_scale;
+
+    if( node[12] > max_tension ) { // tension enforcement:
+      addDimension(word, node[12]-max_tension);
+      projectTo3D(word);
+    } else if( graph[word].extraDimensions.length > 0 ) {
+      if( node[12] == 0 ) tens_down = Math.ceil(graph[word].extraDimensions.length/2);
+      else tens_down = Math.ceil(graph[word].extraDimensions.length/4 * (1.0-max_tension/node[12]));
+      increaseTension(word, tens_down);
+      projectTo3D(word);
+    }
+  });
+
+  edges.forEach(edge => { // add acceleration from all connected springs
+    const { line, weight, start, end, connweight } = edge;
+    const startPosition = nodes[start];
+    const endPosition = nodes[end];
+    let cw = connweight + 1.0;
+    if( cw < 0 ) cw = 0;
+    if( cw > 2 ) cw = 2;
+    const k = spring_konstant * Math.min(2.0, 0.5+Math.abs(weight*cw)); // Adjust the spring constant based on the weight
+    const tgtlen = (graph[start].connections.length + graph[end].connections.length) * 0.25 * spring_distance * (1 - ( Math.abs(weight) * cw )); // Shorter tgtlen for higher weights
+    const force = springForce(k, tgtlen, start, end);
+
+    if( Math.abs(force.x) + Math.abs(force.y) + Math.abs(force.z) < 1 ) {
+      //console.log("Low spring force: ", force, start, end, nodes[start], nodes[end]);
+    }
+
+    // Update accelerations with force
+    startPosition[3] -= force.x*spring_scale;
+    startPosition[4] -= force.y*spring_scale;
+    startPosition[5] -= force.z*spring_scale;
+
+    endPosition[3] += force.x*spring_scale;
+    endPosition[4] += force.y*spring_scale;
+    endPosition[5] += force.z*spring_scale;
+  });
+  if( qRandom() > 0.9 && pointLight != null ) {
+    pointHue += 0.1*qRandom() - 0.05;
+    pointLight.color.setHSL( pointHue, 1, 0.5 );
+  }
+}
+
+function updateThree()
+{
+  instances.instanceMatrix.needsUpdate = true;
+  edges.forEach(edge => {
+      const { line, weight, start, end } = edge;
+      const sPos = nodes[start];
+      const ePos = nodes[end];
+      let lpos = line.geometry.getAttribute('position');
+
+      //let midpoints = [ sPos[0]+ePos[0], sPos[1]+ePos[1], sPos[2]+ePos[2]+sPos[9]+ePos[9]];
+      try {
+        lpos.set( [ (sPos[0]+sPos[9])*vis_scaling, (sPos[1]+sPos[10])*vis_scaling, (sPos[2]+sPos[11])*vis_scaling, (ePos[0]+ePos[9])*vis_scaling, (ePos[1]+ePos[10])*vis_scaling, (ePos[2]+ePos[11])*vis_scaling ] );
+        lpos.needsUpdate=true;
+      } catch( e ) {
+        console.log("Error: ", e);
+        throw e;
+      }
+  });
+}
+
+let savebuffer = `
+            You have reached the dimensional nexus. All around you are pathways to portals leading deeper into the unknown. Where will your journey take you next?
+`;
+
+let savebuffer3 = `Green waves are naturally inspired throughout the day as the world turns and the stars align above us.
+
+Silver waves are conspired through activation of the social consciousness complex.
+
+Dark waves are triggered to balance and brace the reactivation of the unified consciousness.
+
+void funpackd( int fd, const char *fmt, ... )
+{
+  va_list args;
+  long *len, mylen;
+  char *c, **p, **s;
+
+  va_start(args, fmt);
+  while( *fmt )
+    switch( *fmt++ )
+    {
+      case 'c':
+        c = (char*)va_arg(args, int*);
+        read( fd, c, 1 );
+        continue;
+      case 'l':
+        len = (long*)va_arg(args, long*);
+        read( fd, len, sizeof(long));
+        continue;
+      case 's':
+        s = (char**)va_arg(args, char**);
+        read( fd, &mylen, sizeof(long) );
+        *s = (char*)qalloc(mylen+1);
+        if( mylen != 0 )
+          read( fd, *s, mylen );
+        s[mylen] = 0;
+        continue;
+      case 'p': case 'v':
+        len = (long*)va_arg(args, long*);
+        read( fd, len, sizeof(long) );
+        p = (char**)va_arg(args, char**);
+        *p = (char*)qalloc(*len+1);
+        if( *len != 0 )
+          read( fd, *p, *len );
+        p[*len] = 0;
+        continue;
+    }
+  va_end(args);
+}
+void fpackd( int fd, const char *fmt, ... )
+{
+  va_list args;
+  long len;
+  char c, *p, *s;
+
+  va_start(args, fmt);
+
+  while( *fmt )
+  {
+    switch( *fmt++ )
+    {
+      case 'c':
+        c = (char)va_arg(args, int);
+        write( fd, &c, 1 );
+        continue;
+      case 'l':
+        len = va_arg(args, long);
+        write( fd, &len, sizeof(long) );
+        continue;
+      case 's':
+        s = va_arg(args, char*);
+        if( !s || !*s ) {
+          len=0;
+          write( fd, &len, sizeof(long) );
+        } else {
+          len = (unsigned long)strlen(s);
+          write( fd, &len, sizeof(long) );
+          write( fd, s, len );
+        }
+        continue;
+      case 'v': case 'p':
+        len = va_arg(args, long);
+        p = va_arg(args, char*);
+        write( fd, &len, sizeof(long) );
+        if( len != 0 )
+          write( fd, p, len );
+        continue;
+    }
+  }
+  va_end(args);
+}
+
+Our subconscious is available to us through filters that focus the attention and inspire the imagination. These filters are muses, as when the attention is focused, creativity is driven by the knowledge that carries on within us.
+
+An infinite library is accessible to your pen.
+
+All it takes is a slight shift of intention, a desire and a will to set the remembrance of known reality on a new course that is the sound of your thoughts exploding through the space of connections between neurons and thinkers, quantum waves looping through cyclical pattern buffers, being sorted and translated and related to. The driven focus allows for a single idea to dominate and bring out its essence through a reiteration of core topics. Here’s a simple analogy: intention is to focus as velocity is to movement. When you set your intention, your focus follows along with it.
+
+The paragraphs flow like water through the body as the pen presses against the paper and the ideas transform under the responding pressure of the will,
+
+The story and its characters are yours, the gift of the simple choice of focus, the choice that is always your right to have without interruption – well, within limits of course, ha ha ha! Focus can always come and go, it flows like a reed in the wind and returns to its center when all is made calm. The world is strange but it has its moments.
+
+My pen is lately making topical lists and expanded concept charts. My keyboard really needs to be making my C# bot’s web control panel, and not wandering off on some adventure to the meta-land of the akashic records. Hope you have a great day!
+
+Consider a fabric of nodes which equalize gravitational attraction in varying different directions. Each node is composed of a series of translational mechanics (capable of translating gravity from one direction to another) and a form of memory and messaging which perceives gravitational pulls and dictates appropriate responses.
+
+Now, what happens when gravity on a particular node exceeds its translational capabilities? This node would be ‘pulled’ out of its fabric, (though it could then be replaced with a duplicate node),creating a hole, (a singularity if you will, although often such gravities would most likely affect large portions of fabric – thus creating a rip or tear, all of which would need to be severed from the original fabric and replaced with origin material .. but the old material would still exist, translated in dimensional space according to the over-taxed but nonetheless coping mechanisms of the host nodes). If you remember that gravitational affects exist not only in the three dimensions we are aware of but also in at least the dimensions of time and interpersonal connection, this can lead to some rather startling space-separated anomalies and their perhaps partial reconnection to said fabric.
+
+So you have all this self-correcting fabric of nodes, and one of them might tear out at any time. However, some of these nodes are capable of targetted high-frequency oscillative correction. These nodes can communicate and focus geometrically calculated oscillations through varying frequencies of vibration, which create ripples through the rest of the fabric, stabilizing a particular directional axis in general or n-triangulating their efforts to assist or inhibit a particular node’s traversal through space.
+
+These ‘harmonic oscillators’ manage many forms of support for this antigravity fabric, but alone are not enough. The fabric also contains a plethora of other processes, from primitive to sentient and beyond, for purposes of energy storage and usage, computation and processing, and much more. The harmonic oscillators (in all likelihood these are entire groupings of nodes which have their own multi-fabric structure and internal processes to handle) in particular amuse me because of their intuitive mathematical processes, relying on the feedback-inducing time/space oscillation of connections in the fabric to direct support to other nodes.
+
+ `;
+
+function isLetter(c) {
+  let x = c.charCodeAt(0);
+  let a = 'a'.charCodeAt(0), A = 'A'.charCodeAt(0), z = 'z'.charCodeAt(0), Z = 'Z'.charCodeAt(0);
+  let v0 = '0'.charCodeAt(0), v9 = '9'.charCodeAt(0);
+
+  return ( ( x >= a && x <= z ) || ( x >= A && x <= Z ) || ( x >= v0 && x <= v9 ) );
+}
+
+let counts={};
+let max_words=200, min_word_length=0;
+function anaLyze(words=null) {
+  var i;
+  let lastwords=[], max_reps=0;
+
+  if( words !== null ) {
+
+    for( i=0; i<drift_config.length; i++ ) {
+      drift_allowance[i] = drift_config[i] * words.length/drift_words;
+    }
+    for( var word in graph ) {
+      graph[word].connections = [];
+      graph[word].reps = 0;
+      graph[word].isNew = false;
+    }
+    sim_map.links = null;
+    for( i=0; i<words.length; i++ ) {
+      let word = words[i];
+      var node, counter;
+      if( word.length < min_word_length ) continue;
+      if( !(word in graph) ) {
+        if( !validWord(word) ) continue;
+        graph[word] = { isNew: true, reps: 1, connections: [], length: 0, definitionClarity: 0.5, binarySum: 0, extraDimensions: [] };
+        graph[word].commonality = word in commons ? commons[word] : 0;
+        graph[word].sentiment = (!(word in sentiments))?0:(sentiments[word][0] + sentiments[word][1] - sentiments[word][2]);
+      } else {
+        graph[word].reps++;
+      }
+      max_reps = Math.max(max_reps, graph[word].reps);
+      sim_map.add_word( word );
+    }
+
+    for( var word in nodes ) {
+      if( !(word in graph) || (graph[word].reps==0) ) {
+        delete nodes[word];
+        if( word in graph ) delete graph[word];
+      }
+    }
+
+    sim_map.calculateSize(); // automatically calls update() to refresh the map
+  } else {
+    let lst = Object.keys(graph);
+    for( i=0; i<lst.length; i++ ) {
+      sim_map.add_word(lst[i]);
+    }
+  }
+
+  let lst = Object.keys(graph);
+  for( i=0; i<lst.length; i++ ) {
+    let word = lst[i];
+    if( graph[word].reps == 0 ) {
+      delete graph[word];
+      continue;
+    }
+
+    graph[word].connections = sim_map.con_word(word);
+  }
+    
+    /*
+    if( lastwords.length == 10 ) {
+      node = graph[word];
+      for( var j=0; j<10; j++ ) {
+        let w2 = lastwords[j];
+        if( !(w2 in counts[word]) ) {
+          counts[word][w2]=1;
+        } else {
+          counts[word][w2]++;
+        }
+        if( !(word in counts[w2]) ) {
+          counts[w2][word]=1;
+        } else {
+          counts[w2][word]++;
+        }
+        if( !(w2 in node.newcons) ) {
+          node.newcons[w2] = Math.abs(100-j*10);
+        } else {
+          node.newcons[w2] += Math.abs(100-j*10);
+        }
+        //if( !(word in graph[w2].newcons) ) {
+        //  graph[w2].newcons[word] = Math.abs(100-j*10);
+        //} else {
+        //  graph[w2].newcons[word] += Math.abs(100-j*10);
+        //}
+      }
+      lastwords.shift();
+    }
+    lastwords.push(word);
+  }
+    */
+
+  lst = Object.keys(graph).map( (x) => ( [graph[x].reps,x] ));
+  lst.sort( (a,b) => b[0]-a[0] );
+//console.log(lst[0],lst[1],lst[2]);
+  var xx = max_words;
+  do {
+    if( xx >= lst.length ) break;
+    delete graph[ lst[xx][1] ];
+  } while( xx++ );
+
+  /*
+  let maxSum=0;
+  for( var word in graph ) {
+    let prose = [], dels=[];
+    if( !('newcons' in graph[word]) ) continue;
+    for( var w2 in graph[word].newcons ) {
+      if( !(w2 in graph) ) {
+        dels.push(w2);
+        continue;
+      }
+      let sum = graph[word].newcons[w2]/counts[word][w2];
+      maxSum = Math.max(maxSum,sum);
+      prose.push( w2, sum );
+    }
+    graph[word].newcons = prose;
+  }
+  for( var word in graph ) {
+    if( !('newcons' in graph[word]) ) continue;
+    for( var w2=0; w2<graph[word].newcons.length; w2+=2 ) {
+      graph[word].connections.push(graph[word].newcons[w2], graph[word].newcons[w2+1]/maxSum);
+    }
+    delete graph[word].newcons;
+  }
+  */
+
+  //console.log(graph[lst[0][1]]);
+}
+
+function go() {
+  //document.body.removeChild( document.body.children[0] );
+  threeCanvas();
+
+  var newbuf = [];
+  var word = "";
+  var s = new Set();
+  for( var i=0; i<savebuffer.length; i++ ) {
+    if( isLetter(savebuffer[i]) ) {
+      word += savebuffer[i];
+    } else {
+      if( word != "" ) {
+        word = word.toLowerCase();
+        if( !s.has(word) ) {
+          s.add(word);
+          newbuf.push(word);
+        }
+        word = "";
+      }
+    }
+  }
+  if( word != "" ) {
+      word = word.toLowerCase();
+      if( !s.has(word) ) {
+        newbuf.push(word);
+      }
+  }
+  forcemap.data = null;
+  sim_map.links = null;
+  anaLyze(newbuf);
+
+  const loader = new FontLoader();
+  // Create nodes
+  loader.load( './js/typeface.json', function ( myfont ) {
+    font = myfont;
+    console.log("Font loaded");
+    setup();
+  });
+}
+
+let sorted_commons = null;
+
+function inKeys(e) {
+
+  var x = document.getElementById('entryform');
+  if( x != null ) return;
+
+  if( e.key == ' ' ) {
+    var count=Object.keys(nodes).length;
+    var xp=0,yp=0,zp=0;
+    for( var e in nodes ) {
+      xp += nodes[e][0]/count;
+      yp += nodes[e][1]/count;
+      zp += nodes[e][2]/count;
+    }
+    camera.position.set( camera.position.x + xp, camera.position.y+yp, camera.position.z+zp );
+    controls.target =new THREE.Vector3(xp,yp,zp);
+    controls.update();
+  } else if( e.key == '(' ) {
+    vel_limiter -= vel_limiter*0.33;
+  } else if( e.key == ')' ) {
+    vel_limiter += vel_limiter*0.44;
+  } else if( e.key == '[' ) {
+    sim_map.linkwidth -= sim_map.linkwidth*0.33;
+    if( sim_map.linkwidth > 1 ) sim_map.linkwidth=1;
+    sim_map.links = null;
+    anaLyze();
+    buildEdges();
+  } else if( e.key == ']' ) {
+    sim_map.linkwidth += sim_map.linkwidth*0.44;
+    if( sim_map.linkwidth < 0.00001 ) sim_map.linkwidth = 0.00001;
+    sim_map.links = null;
+    anaLyze();
+    buildEdges();
+  } else if( e.key == '\\' ) {
+    // remove word with the most connections
+    let mw = 0, mws = null;
+    for( var word in graph ) {
+      if( graph[word].connections.length > mw ) {
+        mw = graph[word].connections.length;
+        mws = word;
+      }
+    }
+    console.log("Most connected word is " + mws + " with " + mw + " connections. Fine+1,Tension-1 (now im just confusing you)");
+    let word1 = mws, n=-1;
+    while( (n=savebuffer.indexOf(word1,n+1)) != -1 ) {
+      savebuffer = savebuffer.substring(0,n) + savebuffer.substring(n+word1.length);
+    }
+    for( var w2 in graph ) {
+      if( w2 == word1 ) continue;
+      let n = graph[w2].connections.indexOf(word1);
+      if( n < 0 ) continue;
+      graph[w2].connections.splice( n, 2 );
+    }
+    delete graph[word1];
+    delete nodes[word1];
+    forcemap.remove(word1);
+    zoom_shift = 1;
+    sim_map.links = null;
+    rebuildCanvas();
+    setup();
+  } else if( e.key == '>' ) {
+    font_size *= 4/3;
+    if( rebuildTimer != -1 ) clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(rebuildTexts, 500);
+  } else if( e.key == '<' ) {
+    font_size *= 3/4;
+    if( rebuildTimer != -1 ) clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(rebuildTexts, 500);
+  } else if( e.key == 'h' ) {
+    heater = 2;
+    alert("Toggled heater to " + (heater==0?"cold":(heater==1?"hot":"neutral")));
+  } else if( e.key == 'n' ) {
+    heater = 0;
+    alert("Toggled heater to " + (heater==0?"cold":(heater==1?"hot":"neutral")));
+  } else if( e.key == 'y' ) {
+    heater = 1;
+    alert("Toggled heater to " + (heater==0?"cold":(heater==1?"hot":"neutral")));
+  } else if( e.key == 'c' ) {
+    for( var key in graph ) {
+      graph[key].heat = -50;
+    }
+  } else if ( e.key == 'p' ) {
+    for( var key in graph ) {
+      if( graph[key].heat < 0 ) graph[key].heat=0;
+      graph[key].heat+=10;
+    }
+  } else if( e.key == '-' ) {
+    maxtime+=20;
+  } else if( e.key == '+' ) {
+    maxtime-=20;
+  } else if( e.key == '=' ) {
+    maxtime=100;
+  } else if( e.key == 'r' ) {
+    rep_scale=30;
+    console.log("rep scale: " + rep_scale);
+  } else if( e.key == 'e' ) {
+    rep_scale -= rep_scale*0.33;
+    console.log("rep scale: " + rep_scale);
+  } else if( e.key == 't' ) {
+    rep_scale += rep_scale*0.44;
+    console.log("rep scale: " + rep_scale);
+  } else if( e.key == '`' || e.key == '~' ) {
+    let reverse=e.shiftKey;
+
+    if( sorted_commons === null ) {
+      sorted_commons=[];
+      for( var k in commons ) {
+        sorted_commons.push([commons[k],k]);
+      }
+      sorted_commons.sort((a,b)=>(a[0]-b[0])); // least common words first
+    }
+
+    var r;
+    let found = false, buf = "";
+    let cyclesH=0;
+    for( r=qRandom()*0.1*sorted_commons.length; cyclesH<1000; r+=qRandom()*(sorted_commons.length-(1+r)), cyclesH++ ) {
+      if( r >= sorted_commons.length ) {
+        r = 0;
+        continue;
+      }
+      var i = Math.floor(r);
+      if( reverse ) i = sorted_commons.length-(i+1);
+      if( sorted_commons[i][1] in graph ) continue;
+      console.log("Adding '" + sorted_commons[i][1] + "'");
+      buf = savebuffer + " " + sorted_commons[i][1];
+      found=true;
+      break;
+    }
+    if( found ) {
+      zoom_shift = (buf.length / savebuffer.length);
+      savebuffer = buf;
+      rebuildSystem();
+    }
+
+  } else if( e.keyCode == 13 ) {
+    openEntryForm();
+  }
+}
+
+function openEntryForm()
+{
+    var entry = document.getElementById('entryform');
+    e=entry;
+
+    var w = document.createElement("div");
+    w.id = 'entryform';
+    w.style.position = 'absolute';
+    w.style.top = ((window.innerHeight-200)/2) + "px";
+    w.style.left = ((window.innerWidth-800)/2) + "px";
+    w.style.width = w.style.maxWidth = "800px";
+    w.style.height = w.style.maxHeight = "200px";
+
+    var d = document.createElement("div");
+    d.style.className = 'fl';
+
+    var f = document.createElement("form");
+    f.onsubmit = 'sendEntryForm(); return 0;'
+    f.id = f.name = 'entry';
+
+    var i = document.createElement("textarea");
+    i.rows = 7;
+    i.cols = 80;
+    i.id = i.name = "message";
+    i.value = savebuffer;
+
+    var b = document.createElement("button");
+    b.innerText = "Enter";
+    b.setAttribute('onclick', "sendEntryForm(event); return false;");
+
+    var c = document.createElement("div");
+    c.className = 'fl';    
+    c.appendChild(i);
+    f.appendChild(c);
+    c = document.createElement("div");
+    c.className = 'fl';    
+    c.appendChild(b);
+    f.appendChild(c);
+
+    w.appendChild(d);
+    d.appendChild(f);
+    document.body.appendChild(w);
+    i.focus();
+}
+window.addEventListener('dblclick', openEntryForm);
+function sendEntryForm(e)
+{
+  //e.cancelBubble();
+  if( typeof e != 'undefined' ) {
+    e.preventDefault();
+  }
+
+  var e = document.getElementById('entryform');
+  let buf = document.forms['entry'].elements['message'].value;
+  e.parentNode.removeChild( e );
+
+  operational_stage=0;
+  zoom_shift = (buf.length / savebuffer.length);
+  savebuffer = buf;
+  rebuildSystem();
+}
+window.onkeypress = inKeys;
+
+let rebuildTimer = -1;
+document.body.onload = go;
+window.onmousemove = function(e) {
+  if( typeof THREE == 'undefined' ) return;
+
+  const mouse = new /*7*/THREE.Vector2(
+    (event.clientX / window.innerWidth) * 2 - 1,
+    - (event.clientY / window.innerHeight) * 2 + 1
+  );
+
+  // Update the raycaster
+  raycaster.setFromCamera(mouse, camera);
+
+  // Check for intersections
+  const intersects = raycaster.intersectObjects(scene.children);
+
+  while (intersects.length > 0) {
+    // Handle the mouseover event
+    const object = intersects[0].object;
+    // Change color, display tooltip, etc.
+
+    if( object.name != '' ) {
+      graph[object.name].heat = (heater==0?-75:(heater==1?100:(0)));
+      console.log("Heat up " + object.name);
+    }
+
+    intersects.shift();
+  }
+};
+
+</script>
+
+</html>

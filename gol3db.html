@@ -1,0 +1,711 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+
+<head splash>
+	<title>Conway's Game of Life</title>
+	<link rel=stylesheet href='/css/styles.css'>
+	</link>
+</head>
+
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.156.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.156.1/examples/jsm/"
+    }
+  }
+</script>
+<script src='/js/lib.js' type='text/javascript'></script>
+<script src='/js/libtoo.js' type='text/javascript'></script>
+<script src='/js/vst.js' type='text/javascript'></script>
+<script src='/js/rad.js' type='text/javascript'></script>
+<script type="module">
+    import { threeCanvas, threeRender, setSpacing, setSizing, setOpacity, setColorBal, colorBal, controls, getCameraControls, toggleImmortals } from "/js/gol3db.js";
+    window.threeCanvas = threeCanvas;
+    window.threeRender = threeRender;
+    window.setSpacing = setSpacing;
+    window.setSizing = setSizing;
+    window.setOpacity = setOpacity;
+    window.setColorBal = setColorBal;
+    window.colorBal = [50,255,255];
+    window.controls = controls;
+    window.getCameraControls = getCameraControls;
+    window.toggleImmortals = toggleImmortals;
+  </script>
+
+<body style='background: black; color: tan'>
+
+	<div id=splashpage style='min-height: 100%; min-width: 100%; padding: 0px; margin: 0px; background: white; z-index: 200; position: fixed; left: 0px; top: 0px;'>
+		<div id=splashpage2 style='margin: 0px auto; height: 100px; width: 200px; padding: 10px; margin-top: 100px; background: black; color: green; font-size: 18pt'>
+			<div id=splashlabel style='margin: 0px auto; padding: 5px; max-width: 150px; text-align: center; border: 1px solid green; background: black; color: tan'>
+				Loading
+			</div>
+		</div>
+	</div>
+
+	<div xSect=main id=mainscroll class="margin-small">
+	</div>
+
+    <!--
+	# include tpl/backend.html
+    # include tpl/struct.html
+	-->
+	#include tpl/radlib.html
+</body>
+
+</html>
+<script language=javascript>
+	var canvas, ctx, img;
+
+	var rNums = [];
+	var rC = 0, rndMax=2000;
+    var cC = 0;
+	function qRandom() {
+		if( rNums.length < rndMax ) {
+			startRandoms();
+		}
+		rC++;
+        if( rC >= rNums.length ) rC -= rNums.length;
+        cC += Math.floor( rNums[rC] * 50 );
+        while( cC >= rNums.length ) cC -= rNums.length;
+        let x = (rNums[rC]*0.1 + rNums[cC]*0.9);
+
+		return x;
+	};
+	function startRandoms() {
+		while( rNums.length < rndMax ) {
+			rNums.push( Math.random() );
+		}
+	}
+
+    var paused=false;
+	function pause() {
+		paused=!paused;
+	}
+
+	var running=false;
+    var gravTimeout=100;
+	function animate() {
+		if( paused ) return;
+		if( running ) {
+			return;
+		} else {
+			running = true;
+		}
+		var tn = new Date();
+
+        application();
+
+        var tx = new Date();
+		var td = tx - tn;
+		var chg=false;
+		if( gravTimeout < 1.5*td ) { // using too much cpu.
+			gravTimeout *= 1.5;
+			chg=true;
+		} else if( gravTimeout > td*4 ) { // going too slowly.
+			gravTimeout /= 1.5;
+			chg=true;
+		}
+		if(chg){
+			clearInterval(gravTimer);
+			gravTimer = setInterval( "animate()", gravTimeout );
+			if( gravTimeout > 6000 )
+				console.log("gt="+gravTimeout);
+		}
+		//console.log(td, tn.getSeconds(), tx.getSeconds());
+		running=false;
+	}
+
+    var neighbors, cells, lifetime;
+    var usefreq=0.2;
+    let silent=false;
+    let spacing = 1.33;//3.33;
+    let opacity = 0.5;
+    let sizing = 0.5;
+
+    var start_health = 1.1; // max neighbors is 18+8=26
+    let max_health = 100;
+    let life_per_sec = 0.1;
+    let damage = 17;
+    let healing_constant = 0.01;
+    let healing_factor = 0.22;
+    let damage_entropy = 1.1; // there's a small chance that attacking will actually help the enemy
+    let rules = [{ // clearing rules (400000+)
+        cond: { above: 300000 },
+        min_birth: 7, max_birth: 8,
+        min_death: 6, max_death: 9,
+        min_lifer: 7, max_lifer: 8
+    }, { // normal rules (300000-) // 9 9 1 9, 10 15 2 10
+//        min_birth: 9, max_birth: 9,
+//        min_death: 4, max_death: 8,
+//        death_above: 17
+        cond: { above: 4000 },
+        min_birth: 9, max_birth: 10,
+        min_death: 8, max_death: 13,
+        min_lifer: 5, max_lifer: 10
+    }, { // growth rules (0+)
+        min_birth: 7, max_birth: 7,
+        min_death: 5, max_death: 12,
+        min_lifer: 5, max_lifer: 9
+    }];
+    var gravTimer=-1;
+    var fullD;
+    function restart() {
+        var i, j, k;
+        var usew=fullW, useh=fullH, used=fullD;
+
+        neighbors = new Array(used);
+        cells = new Array(used);
+        lifetime = new Array(used);
+
+        console.log("restart() : " + total_alive);
+
+        for( i=0; i<used; i++ ) {
+            neighbors[i] = new Array(useh);
+            cells[i] = new Array(useh);
+            lifetime[i] = new Array(useh);
+
+            for( j=0; j<useh; j++ ) {
+                neighbors[i][j] = new Array(usew).fill(0);
+                cells[i][j] = new Array(usew).fill(0);
+                lifetime[i][j] = new Array(usew).fill(0);
+            }
+        }
+
+        // initialize
+        let dtn = new Date().getTime();
+        generateRandom(used*usew*useh*usefreq);
+        countFirstTime();
+
+        if( gravTimer != -1 )
+            clearInterval(gravTimer);
+        gravTimer = setInterval('animate()', gravTimeout);
+
+    }
+
+    let last_report=0;
+    let living_dir=0;
+    let last_alive=0;
+
+    function countFirstTime() {
+        var usew=fullW, useh=fullH, used=fullD;
+        var i, j, k;
+        var z, y, x;
+        var posns = [ [
+            [ [-1,-1,-1], [-1,-1,0], [-1,-1,1] ],
+            [ [-1,0,-1], [-1,0,0], [-1,0,1] ],
+            [ [-1,1,-1], [-1,1,0], [-1,1,1] ]
+                ], [
+            [ [0,-1,-1], [0,-1,0], [0,-1,1] ],
+            [ [0,0,-1], [0,0,0], [0,0,1] ],
+            [ [0,1,-1], [0,1,0], [0,1,1] ]
+                ], [
+            [ [1,-1,-1], [1,-1,0], [1,-1,1] ],
+            [ [1,0,-1], [1,0,0], [1,0,1] ],
+            [ [1,1,-1], [1,1,0], [1,1,1] ]
+                ] ];
+        for( i=0; i<used; i++ ) {
+            for( j=0; j<useh; j++ ) {
+                neighbors[i][j] = new Array(usew).fill(0);
+            }
+        }
+
+        total_alive=0;
+        for( i=0; i<used; i++ ) {
+            for( j=0; j<useh; j++ ) {
+                for( k=0; k<usew; k++ ) {
+
+                    if( cells[i][j][k] == 0 ) continue;
+
+                    total_alive++;
+
+                    for( z=-1; z<2; z++ ) {
+                        for( y=-1; y<2; y++ ) {
+                            for( x=-1; x<2; x++ ) {
+                                if( x == 0 && y == 0 && z == 0 ) continue;
+
+                                if( i+z < 0 || i+z >= used ) continue;
+                                if( j+y < 0 || j+y >= useh ) continue;
+                                if( k+x < 0 || k+x >= usew ) continue;
+
+                                neighbors[i+z][j+y][k+x]++;
+                            }
+                        }
+                    }
+                }                
+            }
+        }
+        let dtn = new Date().getTime()/1000;
+        let new_dir = total_alive - last_alive;
+
+        let reported=false;
+        if( (new_dir>=0) != (living_dir>=0) ) {
+            if( Math.abs(new_dir) > 20 && Math.abs(living_dir) > 20 ) {
+                reported=true;
+                last_report = dtn;
+                console.log("Move over 0: " + total_alive + " ( " + new_dir + " )");
+            }
+        }
+
+        if( !reported && Math.abs(new_dir - living_dir) > (Math.abs(new_dir)+Math.abs(living_dir))/2 ) {
+            reported=true;
+            last_report = dtn;
+            console.log("Large shift: " + total_alive + " ( " + new_dir + " )");
+        }
+        if( last_report < 5+dtn ) {
+            last_report = dtn;
+            console.log("Living: " + total_alive + " ( " + new_dir + " )");
+        }
+        last_alive = total_alive;
+        living_dir = new_dir;
+    }
+
+    function generateRandom(n) {
+        let i, j;
+        let usew=fullW, useh=fullH, used=fullD;
+        var x,y,z,v;
+        let dtn = new Date().getTime();
+        for( i=0; i<n; i++ ) {
+            v=0;
+            do {
+                x = Math.floor(qRandom() * usew);
+                y = Math.floor(qRandom() * useh);
+                z = Math.floor(qRandom() * used);
+                v++;
+            } while( v<100 && cells[z][y][x] != 0 );
+            if( v>=100 ) {
+                console.log("I think that's enough life for now " + i + ": " + x + ", " + y + ", " + z);
+                break;
+            }
+            //if( lifetime[z][y][x] > dtn - 5 ) continue;
+            cells[z][y][x] = start_health;
+            lifetime[z][y][x] = dtn;
+        }
+    }
+
+    function clearRandom(n) {
+        let i, j, k, z;
+        let usew=fullW, useh=fullH, used=fullD;
+        let dtn = new Date().getTime();
+        let alive=[];
+        let buggy=false;
+        for( i=0; i<used; i++ ) {
+            for( j=0; j<useh; j++ ) {
+                for( k=0; k<usew; k++ ) {
+                    if( cells[i][j][k] > 0 )
+                        alive.push([i,j,k]);
+                }
+            }
+        }
+        for( i=0; i<n && alive.length > 0; i++ ) {
+
+            let v = Math.round(qRandom() * (alive.length-1));
+            if( buggy ) {
+                [i,j,k] = alive[v];
+                cells[i][j][k] = 0;
+            } else {
+                [z,j,k] = alive[v];
+                cells[z][j][k] = 0;
+            }
+            alive.splice(v,1);
+
+        }
+    }
+
+
+    let total_alive=0;
+    let current_rule=0;
+
+    let camera_vel = [0,0,0];
+    let camera_tgt_vel = [0,0,0];
+    let camera_dist = 0;
+    let last_time = 0;
+ 
+    //var min_birth = 14, max_birth = 19;
+    //var min_death = 13, max_death = 30;
+    function application() {
+        //!animate here
+        var v;
+        var i, j, k;
+        var usew=fullW, useh=fullH, used=fullD;
+        var z, y, x;
+        let growth_factor = 0.44, loss_factor = 0.33;
+
+        //camera_dist = camera.position.distanceTo(camera._target);
+
+
+        for( var k in hitting_keys ) {
+            switch( k ) {
+            case '+':
+                generateRandom(used*usew*useh*usefreq*0.2);
+                break;
+            case '-':
+                clearRandom(used*usew*useh*usefreq*0.2);
+                break;
+            case 'c':
+                damage -= damage*loss_factor;
+                console.log("Damage: " + damage);
+                break;
+            case 'v':
+                damage += damage*growth_factor;
+                console.log("Damage: " + damage);
+                break;
+            case 't':
+                start_health += start_health*growth_factor;
+                console.log("Start: " + start_health + ", Max: " + max_health);
+                break;
+            case 'g':
+                start_health -= start_health*loss_factor;
+                if( start_health < 1 ) start_health=1;
+                console.log("Start: " + start_health + ", Max: " + max_health);
+                break;
+            case 'y':
+                max_health += max_health*growth_factor;
+                console.log("Start: " + start_health + ", Max: " + max_health);
+                break;
+            case 'h':
+                max_health -= max_health*loss_factor;
+                if( max_health < 2 ) max_health=2;
+                console.log("Start: " + start_health + ", Max: " + max_health);
+                break;
+        	case 'w':
+                sizing += sizing*growth_factor;
+                setSizing(sizing);
+                break;
+        	case 's':
+                sizing -= sizing*loss_factor;
+                if( sizing < 0.05 ) sizing = 0.05;
+                setSizing(sizing);
+                break;
+        	case 'a':
+                spacing -= 0.5;
+                if( spacing < 0.5 ) spacing = 0.5;
+                setSpacing(spacing);
+                break;
+        	case 'd':
+                spacing += 0.5;
+                setSpacing(spacing);
+                break;
+        	case 'q':
+                opacity -= opacity*loss_factor;
+                if( opacity < 0 ) opacity=0;
+                setOpacity(opacity);
+                break;
+        	case 'e':
+                opacity += opacity*growth_factor;
+                if( opacity > 1 ) opacity=1;
+                setOpacity(opacity);
+                break;
+            case 'u':
+                colorBal[0] += colorBal[0]*growth_factor;
+                setColorBal(0, colorBal[0]);
+                break;
+            case 'j':
+                colorBal[0] -= colorBal[0]*loss_factor;
+                setColorBal(0, colorBal[0]);
+                break;
+            case 'i':
+                colorBal[1] += colorBal[1]*growth_factor;
+                setColorBal(1, colorBal[1]);
+                break;
+            case 'k':
+                colorBal[1] -= colorBal[1]*loss_factor;
+                setColorBal(1, colorBal[1]);
+                break;
+            case 'o':
+                colorBal[2] += colorBal[2]*growth_factor;
+                setColorBal(2, colorBal[2]);
+                break;
+            case 'l':
+                colorBal[2] -= colorBal[2]*loss_factor;
+                setColorBal(2, colorBal[2]);
+                break;
+            }
+        }
+        hitting_keys={};
+        
+        //console.log("application()");
+
+        var births = [], deaths = [], lifers = [];
+        let mdc=0;
+
+        var min_birth, max_birth, min_death, max_death, death_above;
+
+        let found=false;
+        for( i=0; i<rules.length; i++ ) {
+            if( !('cond' in rules[i]) ) {
+                found=true;
+            } else {
+                let c = rules[i].cond;
+                if( 'above' in c && total_alive > c.above ) {
+                    found=true;
+                } else if( 'below' in c && total_alive < c.below ) {
+                    found=true;
+                }
+            }
+            if( found ) {
+                if( current_rule != i ) {
+                    current_rule=i;
+                    if( !silent )
+                        console.log("switch: rule " + i + ": total_alive=" + total_alive);
+                }
+                break;
+            }
+        }
+
+        min_birth = rules[current_rule].min_birth;
+        max_birth = rules[current_rule].max_birth;
+        min_death = rules[current_rule].min_death;
+        max_death = rules[current_rule].max_death;
+        let min_lifer = rules[current_rule].min_lifer;
+        let max_lifer = rules[current_rule].max_lifer;
+        death_above = rules[current_rule].death_above;
+
+        let hc = qRandom(), hf = qRandom();
+        let dtn = new Date().getTime()/1000;
+        let dx = dtn - last_time;
+        if( last_time == 0 ) dx = 0;
+        //dx*=25;
+        last_time = dtn;
+
+        for( i=0; i<used; i++ ) {
+            for( j=0; j<useh; j++ ) {
+                for( k=0; k<usew; k++ ) {
+                    if( cells[i][j][k] > 0 ) {
+                        cells[i][j][k] += (cells[i][j][k]*healing_factor*hf + healing_constant*hc)*dx;
+                        if( neighbors[i][j][k] <= min_death ) {
+                            deaths.push([i,j,k,1+(min_death-neighbors[i][j][k])]);
+                        } else if( neighbors[i][j][k] >= max_death ) {
+                            deaths.push([i,j,k,1+(neighbors[i][j][k]-max_death)]);
+                        } else if( cells[i][j][k] < max_health && neighbors[i][j][k] >= min_lifer && neighbors[i][j][k] <= max_lifer ) {
+                            lifers.push([i,j,k]);
+                        }
+                    } else {
+                        if( /*neighbors[i][j][k] == 0 ||*/ ( neighbors[i][j][k] >= min_birth && neighbors[i][j][k] <= max_birth ) ) {
+                            births.push([i,j,k]);                    
+                        }
+                    }
+                }
+            }
+        }
+
+        for( v=0; v<deaths.length; v++ ) {
+            var x;
+            [i,j,k,x] = deaths[v];
+
+            if( cells[i][j][k] > 0 ) {
+                cells[i][j][k]-= x*(damage - damage*qRandom()*damage_entropy)*dx;
+                if( cells[i][j][k] <= 0 ) {
+                    cells[i][j][k]=0;
+                    total_alive--;
+                    for( z=-1; z<2; z++ ) {
+                        for( y=-1; y<2; y++ ) {
+                            for( x=-1; x<2; x++ ) {
+                                if( x == 0 && y == 0 && z == 0 ) continue;
+
+                                if( i+z < 0 || i+z >= used ) continue;
+                                if( j+y < 0 || j+y >= useh ) continue;
+                                if( k+x < 0 || k+x >= usew ) continue;
+
+                                neighbors[i+z][j+y][k+x]--;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for( v=0; v<lifers.length; v++ ) {
+            [i,j,k] = lifers[v];
+
+            cells[i][j][k]+=(life_per_sec*0.75 + life_per_sec*qRandom())*dx;
+            //lifetime[i][j][k] = dtn;
+        }
+
+
+        for( v=0; v<births.length; v++ ) {
+            [i,j,k] = births[v];
+
+            cells[i][j][k] = start_health;
+            total_alive++;
+            lifetime[i][j][k] = dtn;
+            for( z=-1; z<2; z++ ) {
+                for( y=-1; y<2; y++ ) {
+                    for( x=-1; x<2; x++ ) {
+                        if( x == 0 && y == 0 && z == 0 ) continue;
+
+                        if( i+z < 0 || i+z >= used ) continue;
+                        if( j+y < 0 || j+y >= useh ) continue;
+                        if( k+x < 0 || k+x >= usew ) continue;
+
+                        neighbors[i+z][j+y][k+x]++;                        
+                    }
+                }
+            }
+        }
+        let dt2 = new Date().getTime()/1000.0;
+        let new_dir = total_alive - last_alive;
+
+        let reported=false;/*
+        if( (new_dir>=0) != (living_dir>=0) ) {
+            if( Math.abs(new_dir) > 100 && Math.abs(living_dir) > 100 ) {
+                reported=true;
+                last_report = dt2;
+                console.log("Move over 0: " + total_alive + " ( " + new_dir + " )");
+            }
+        }*/
+
+        if( !reported && Math.abs(new_dir) > 1000 && Math.abs(new_dir - living_dir) > (Math.abs(new_dir)+Math.abs(living_dir))*2 ) {
+            reported=true;
+            last_report = dt2;
+            console.log("Large shift: " + total_alive + "+" + new_dir + " ( " + (new_dir-living_dir) + " )");
+        }
+        if( last_report+10 < dt2 ) {
+            last_report = dt2;
+            console.log("Living: " + total_alive + " ( " + new_dir + " )");
+        }
+        last_alive = total_alive;
+        living_dir = new_dir;
+
+        //generateRandom(usew*useh*0.0001);
+        //if( !silent )
+        //    console.log(total_alive, births.length, deaths.length);
+
+        if( total_alive < 200 ) {
+            restart();
+            return;
+        }
+        //if( births.length + deaths.length != 0 )
+            //console.log(mdc, births.length + " / " + deaths.length);
+
+        threeRender();
+    }
+    
+
+    /*
+	function drawDisplay() {
+		var x, y, d, p, j;
+		//img = ctx.getImageData(0, 0, fullW, fullH);
+        img = new ImageData(fullW, fullH);
+		d = img.data;//new Array(fullW*fullH).fill(0);//img.data;
+		var v, red, green, blue;
+
+		p = 0;
+		j = 0;
+		//ctx.clearRect(0,0,ctx.width,ctx.height);
+        var dtn = new Date().getTime();
+        var life;
+		for (y = 0; y < fullH; ++y) {
+			for (x = 0; x < fullW; ++x) {
+                if( cells[y][x] == 0 ) {
+                    d[p+0] = d[p+1] = d[p+2] = d[p+3] = 0;
+                } else {
+                    red=green=blue= 128;
+                    life = dtn - lifetime[y][x];
+                    if( life < 100 ) {
+                        red = rainbow[y][x][0];
+                        green = 0;
+                        blue = rainbow[y][x][1];
+                    } else if( life < 500 ) {
+                        red += life/2;
+                    } else if( life < 2000 ) {
+                        green += life/4;
+                    } else {
+                        blue += life/10;
+                    }
+                    d[p + 0] = 255 & red; // r
+                    d[p + 1] = 255 & green; // g
+                    d[p + 2] = 255 & blue; // b
+                    d[p + 3] = 255; // alpha
+                }
+				p += 4;
+				j += 3;
+			}
+		}
+		ctx.putImageData(img, 0, 0);
+		ctx.scale(2,2);
+	}
+    */
+	//https://hacks.mozilla.org/2011/12/faster-canvas-pixel-manipulation-with-typed-arrays/
+	registerStartup(startScreen);
+let hitting_keys = {};
+let immortals = false;
+    registerKeyboard( function(code,e) {
+        var usew=fullW, useh=fullH, used=fullD;
+        hitting_keys[e.key] = true;
+        if( e.key == 'r' ) {
+            restart();
+        } else if( e.key == 'z' ) {
+            silent = !silent;
+        } else if( e.key == 'p' ) {
+            pause();
+        } else if( e.key == '.' ) {
+            toggleImmortals(immortals=!immortals);
+        }
+    });
+
+	function startScreen() {
+
+        basicMenu = [
+            { 'title': '<fl onclick="restart()">Start</fl>', },
+        ];
+        //structMenu(basicMenu);
+		radLoad();
+
+		startRandoms();
+        setColorBal(0, colorBal[0]);
+        setColorBal(1, colorBal[1]);
+        setColorBal(2, colorBal[2]);
+		registerResize( resizeScreen );
+		resizeScreen();
+	}
+	var fullW=0, fullH=0, fullD=0;
+	var rst = -1;
+
+	function resizeScreen() {
+		if( rst != -1 ) clearTimeout(rst);
+		rst = setTimeout("resizeScreen2()", 15);
+	}
+	function resizeScreen2() {
+
+        if( typeof setSizing == 'undefined' ) {
+            rst = setTimeout("resizeScreen2()", 100);
+            return;
+        }
+        rst = -1;
+		fullW = 100;//Math.floor(winW/2);
+		fullH = 100;//Math.floor(winH/2);
+        fullD = 100;//Math.floor( (fullW + fullH)/2 );
+        //rain();
+		var mscroll = gE("mainscroll");
+
+        /*
+		var canvas = mscroll.children[0];
+        if( canvas ) {
+            mscroll.removeChild(canvas);
+        }*/
+
+        setSizing(sizing); setSpacing(spacing); setOpacity(opacity);
+        threeCanvas(mscroll, fullW, fullH);
+
+		setTimeout('finishResizeScreen()', 15);
+	}
+    let first_config_load=true;
+	function finishResizeScreen()
+	{
+        var mscroll = gE("mainscroll");
+		var canvas = mscroll.children[0];
+		canvas.style.position = 'absolute';
+		canvas.style.top = '0px';
+		canvas.style.left = '0px';
+        console.log("finishResizeScreen()");
+        restart();
+	}
+
+	function fixFloat(f, n=4)
+	{
+		return Number(f).toFixed(n);
+	}
+
+</script>

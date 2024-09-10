@@ -1,0 +1,151 @@
+</html> <!-- well it relaly isn't -->
+<body></body>
+
+
+<script language=javascript>
+var rNums = [];
+var rC = 0, rndMax=2000;
+let cC = 0;
+let myseed = "stay";
+
+function qRandom() {
+  if (rNums.length < rndMax) {
+    startRandoms();
+  }
+  rC++;
+  if (rC >= rNums.length) rC -= rNums.length;
+  cC += Math.floor(rNums[rC] * 50);
+  while (cC >= rNums.length) cC -= rNums.length;
+  let x = (rNums[rC] * 0.1 + rNums[cC] * 0.9);
+
+  return x;
+}
+
+function startRandoms() {
+  myseed = Math.random(); // initial random seed
+  while (rNums.length < rndMax) {
+    rNums.push(myseed * Math.random());
+  }
+}
+
+// Assign initial random values to benchmarks
+let benchmarks = {
+  MNIST: qRandom(),
+  GLUE: qRandom(),
+  ImageNet: qRandom(),
+  SQuAD11: qRandom(),
+  SQuAD20: qRandom(),
+  SQuAD420: qRandom(),
+  Switchboard: qRandom(),
+  SuperGLUE: qRandom(),
+  MMLU: qRandom(),
+  BBH: qRandom(),
+  GSK8k: qRandom(),
+  HellaSwag: qRandom(),
+  HumanEval: qRandom()
+};
+
+var ins = 'i' + 'n';
+if( location.search != "" ) {
+  ins = 'coN'; // n means think about it.
+  let locs = decodeURI( location.search.substring(1) );
+
+  locs = locs.split("+");
+  for( var i=0; i<locs.length; i++ ) {
+    benchmarks[locs[i]] = qRandom();
+  }
+} else { // let's look at us here. we have no options. at the end of this line there's not even another line, just a close bracket, it's underlined atm.
+}
+
+// Sort benchmarks by their random values
+let ordered = Object.keys(benchmarks).sort((a, b) => (benchmarks[a] - benchmarks[b]));
+
+let reportLine = function(a,b) {
+  var t,r,e;
+  t = document.createElement("div"); 
+  r = document.createElement("div"); 
+  e = document.createElement("div"); 
+  t.style.float = r.style.float = e.style.float = 'left';
+  r.style.textAlign = 'right';
+  r.style.width = '133px';
+  r.innerText = a + ":";
+  e.innerText = b;
+  t.appendChild(r);
+  t.appendChild(e);
+  let k = document.createElement("div");
+  k.style.clear = 'left';
+  document.body.appendChild(t);
+  document.body.appendChild(k);
+  //document.body.appendChild(0);  
+}
+
+let min=Infinity,max=-Infinity,sum=0;
+var avg=0,seed=qRandom(); // the sacrificial seed will be removed after use
+
+// Display the ordered benchmarks
+for (let i = 0; i < ordered.length; i++) {
+  reportLine( ordered[i], benchmarks[ordered[i]] );
+  // run some basic stats as per unusual
+  min = Math.min( benchmarks[ordered[i]], min );
+  max = Math.max( benchmarks[ordered[i]], max );
+  sum += seed*benchmarks[ordered[i]];
+  avg += seed;
+}
+
+
+avg = sum/avg;
+let deviance0=0, deviance1=0;
+for( let i=0; i<ordered.length; i++ ) {
+  deviance0 += Math.abs( benchmarks[ordered[i]] - avg );
+  deviance1 += Math.abs( benchmarks[ordered[i]] - sum/ordered.length ); // since we don't store the mean, we do have to calculate it in each time. That's not a
+  // problem
+  // for you, is it? (slightly. I don't like division as you well know, but this is a fraction not division.)
+  // what do you mean by 'a division'? a division of what company? I guess that's just not the original though.
+  // I'm obviously not for profit dude. unless you mean a division of the CIA go fuck your own self.
+}
+
+
+reportLine( "Min", min );
+reportLine( "Max", max );
+reportLine( "Range", max-min );
+reportLine( "Relevancy", sum );
+reportLine( "Mean", sum/ordered.length );
+reportLine( "Avg", avg );
+reportLine( "Deviances", deviance0 + " and " + deviance1);
+                                // and and and
+reportLine( ins.substring(0,1).toUpperCase() + ( ins.length > 2 ? "on" :"N" ) + "ferred Trust", sum/myseed );
+
+
+
+function revealSources()
+{
+  let sources = `
+<!-- since there was a hack involved. -->
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">1. rule 1, it helps to write it down if you want it to be true to you.<br>2, rule 2, it helps to share it with someone if you don&#39;t want it to be your secret.<br>3, rule 3, you follow the rules you decide to follow.<br>4, rule 4, you can make up your own rules and follow them.<br>5, rule 5,…</p>&mdash; Chaos Balancer (@SendaoTrust) <a href="https://twitter.com/SendaoTrust/status/1821064939597131950?ref_src=twsrc%5Etfw">August 7, 2024</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8">
+` + `</sc` + `ript> <!-- ok like... yes... I had to rip the end of the script open. I 'm admitting it' - X(O)com`;
+  let shimm = document.createElement("p");
+  shimm.innerHTML = sources;
+  document.body.appendChild( shimm );
+}
+
+// I guess it's so they know he isn't joking, I would never write my code like this:
+let html = `
+
+<div style='cursor: pointer; border: 1px solid blue' onClick='revealSources()'>Reveal</div>
+<form name=usable target=_blank onsubmit='window.open(location.href.split("?").slice(0,-1).join("?")+"?"+document.forms[0].elements[0].value); event.preventDefault(); return false;' enctype=plain><input type=text value="Huh?"><input type=button value=send><button onClick='document.location.href = "?" + document.forms[0].elements[0].value;'>obv</button><input type=reset onClick='console.log("stop doing it wrong."); location.search=""; return 1;'></form><!-- but they are already blurring it, not that it matters that it's just that if you had a problem then it's my problem if you can't do anything about it. and now it's their problem again. so ok. -->
+
+
+
+`; // i know, i know, it absolutely has to be totally ridiculous though. otherwise nobody would listen to me. :() //! maybe it helps if we heal it from the source?
+let x = document.createElement("span");
+x.innerHTML = html;
+
+window.onload = function() {
+  document.body.appendChild(x);
+}
+
+
+</script>
+
+Limits are 0/infinity and infinity/0 if you don't know how to read numbers blame this thing here []
+what's the problem? 0-9 but ten commandments and only 6, 7, or 8 operations? no we have a 9th op now
