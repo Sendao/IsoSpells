@@ -28,7 +28,7 @@
     window.setSizing = setSizing;
     window.setOpacity = setOpacity;
     window.setColorBal = setColorBal;
-    window.colorBal = [50,255,255];
+    window.colorBal = [100,100,50];
     window.controls = controls;
     window.getCameraControls = getCameraControls;
     window.toggleImmortals = toggleImmortals;
@@ -124,13 +124,13 @@
     let opacity = 0.5;
     let sizing = 0.5;
 
-    var start_health = 1.1; // max neighbors is 18+8=26
-    let max_health = 100;
-    let life_per_sec = 0.1;
-    let damage = 17;
+    var start_health = 1.25; // max neighbors is 18+8=26
+    let max_health = 1000;
+    let life_per_sec = 0.125;
+    let damage = 20;
     let healing_constant = 0.01;
     let healing_factor = 0.22;
-    let damage_entropy = 1.1; // there's a small chance that attacking will actually help the enemy
+    let damage_entropy = 1.2; // there's a small chance that attacking will actually help the enemy
     let rules = [{ // clearing rules (400000+)
         cond: { above: 300000 },
         min_birth: 7, max_birth: 8,

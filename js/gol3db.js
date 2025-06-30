@@ -198,7 +198,7 @@ export function threeRender()
                 life = dtn - lifetime[i][j][k];
                 red = rainbow[j][k][0];
                 green = rainbow[j][k][1];
-                blue = life/20 > 255 ? 255 : life/20;
+                blue = life/5 > 255 ? 255 : life/5;
                 /*
                 if( life < 25 ) {
                     red /= 3;
@@ -225,9 +225,10 @@ export function threeRender()
                     if( red > 186 ) red=0; if( green > 186 ) green=0; if( blue > 186*0.7 ) blue=0;
                 }
 
-                if( red < 50 ) red = 50;
+                if( red < 10 ) red = 10;
                 if( red > 200 ) red = 200;
                 if( green > 200 ) green = 200;
+                if( green < 100 ) green = 100;
                 if( blue < 100 ) blue = 100;
 
                 instances.setColorAt( i*oneframe + j*mywidth + k, new THREE.Color( -.05 + red/300.0, -0.1 + green/400.0, 0.2 + blue/300.0 ) );

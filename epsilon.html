@@ -1,0 +1,202 @@
+<html>
+<body>
+<script src="/js/sentiments.js"></script>
+<script language=javascript>
+var a,b,voices;
+let chosenVoice=0;
+
+function run()
+{
+	go(b.join(" "));
+	setTimeout(run,20000);
+}
+function findZira()
+{	
+	for (let i = 0; i < voices.length; i++) {
+		if( !voices[i].localService ) continue;
+		if( voices[i].name.indexOf("Zira") != -1 ) {
+			chosenVoice = i;
+			break;
+		}
+	}
+}
+function go(txt)
+{
+	[a,f] = gen(txt, document.forms[0].flavor.value, document.forms[0].changing.checked);
+	s = document.forms[0].spokenword.checked;
+	document.getElementById('genarea').innerText = a;
+	saveGen(a);
+	b = a.split(' ').slice(-6);
+	document.forms[0].txt.value = b.join(" ");
+	saveText();
+	document.forms[0].flavor.value = f;
+	saveFlavor();
+
+  if( s ) {
+    let utter = new SpeechSynthesisUtterance(a);
+    utter.voice = voices[ chosenVoice ];
+    utter.rate = 1.0;
+    window.speechSynthesis.speak(utter);
+  }
+}
+</script>
+
+<div id=genarea style='max-width: 640px; font-size: 18pt'></div>
+
+<div id=formarea>
+<form onsubmit="return false;">
+<BR>
+<div style='float: left'>
+<div style='float: left'>
+<div style='float: left'>gen:</div>
+<div style='float: left'>
+<input type=text onchange='saveText()' name=txt size=80 value='hello, world!'>
+</div>
+</div>
+<BR>
+<div style='float: left'>
+<div style='float: left'>em:</div>
+<div style='float: left'>
+<input type=text onchange='saveFlavor()' name=flavor size=80 value='kind gentle'>
+</div>
+</div>
+<br>
+<div style='float: left'>
+	<div style='float: left'><input type=checkbox checked name=changing></div>
+	<div style='float: left'>changing emotions</div>
+</div>
+<div style='clear: both'></div>
+<div style='float: left'>
+	<div style='float: left'><input type=checkbox id=spokenword name=spokenword></div>
+	<div style='float: left'>spoken word</div>
+</div>
+</div>
+
+<button onclick="go(this.form.txt.value);" style='width: 100px; height: 100px; float: left'>Go</button>
+
+</form>
+<div style='clear:both'>&nbsp;</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='run();'>Run</div>
+<div style='clear:both'>&nbsp;</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("/2 " + b.join(" "));'>/2</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("/3 " + b.join(" "));'>/3</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("/4 " + b.join(" "));'>/4</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("/5 " + b.join(" "));'>/5</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("/6 " + b.join(" "));'>/6</div>
+<div style='height: 100px; clear: both'>&nbsp;</div>
+<div style='float: left; width: 100px; height: 100px; border: 1px solid black; background: gray; clear: both' onClick='go("-50 " + b.join(" "));'>50w</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("-70 " + b.join(" "));'>70w</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("-150 " + b.join(" "));'>150w</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("-200 " + b.join(" "));'>200w</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='go("-300 " + b.join(" "));'>300w</div>
+<div style='height: 100px; clear: both'>&nbsp;</div>
+<div style='float: left; width: 100px; height: 100px; border: 1px solid black; background: gray; clear: both' onClick='window.open("angels.html?" + encodeURIComponent(a));'>Angels</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='window.open("rays.html?" + encodeURIComponent(documnt.forms[0].txt.value));'>Rays</div>
+<div style='float: left; margin-left: 20px; width: 100px; height: 100px; border: 1px solid black; background: gray;' onClick='renderLibrary()'>Library</div>
+<div id=container style='width: 1024px; height: 800px'></div>
+</div>
+
+</body>
+<script src='epsilon/tokens.js'></script>
+<script src="https://unpkg.com/konva@9/konva.min.js"></script>
+<script src='js/qrandom.js'></script>
+<script language=javascript>
+var rNums = [];
+var rC = 0, rndMax=2000;
+let cC = 0;
+let myseed = "stay";
+
+function qRandom() {
+  if (rNums.length < rndMax) {
+    startRandoms();
+  }
+  rC++;
+  if (rC >= rNums.length) rC -= rNums.length;
+  cC += Math.floor(rNums[rC] * 50);
+  while (cC >= rNums.length) cC -= rNums.length;
+  let x = (rNums[rC] * 0.1 + rNums[cC] * 0.9);
+
+  return x;
+}
+
+function startRandoms() {
+  myseed = Math.random(); // initial random seed
+  while (rNums.length < rndMax) {
+    rNums.push(myseed * Math.random());
+  }
+}
+</script>
+
+<script language=javascript>
+window.onload = function() {
+	if( 'flavor' in window.localStorage ) {
+		document.forms[0].flavor.value = window.localStorage['flavor'];
+	}
+
+	if( 'gen' in window.localStorage ) {
+		document.getElementById('genarea').innerText = window.localStorage['gen'];
+	} else if( 'text' in window.localStorage ) {
+		document.forms[0].txt.value = window.localStorage['text'];
+		go( document.forms[0].txt.value );
+	} else {
+		go( document.forms[0].txt.value );
+	}
+}
+let registered=false;
+document.getElementById('spokenword').addEventListener('change', ()=>{
+	voices = window.speechSynthesis.getVoices();
+	if( voices.length != 0 ) {
+		findZira();
+	} else if( !registered ) {
+		registered=true;
+		speechSynthesis.addEventListener('voiceschanged', () => {
+    	voices = window.speechSynthesis.getVoices();
+    	findZira();
+		});
+	}
+});
+function saveGen(msg)
+{
+	window.localStorage['gen'] = msg;
+}
+function saveText()
+{
+	window.localStorage['text'] = document.forms[0].txt.value;
+}
+function saveFlavor()
+{
+	window.localStorage['flavor'] = document.forms[0].flavor.value;
+}
+function renderLibrary()
+{
+	// first we need to create a stage
+	var stage = new Konva.Stage({
+	  container: 'container',   // id of container <div>
+	  width: 500,
+	  height: 500
+	});
+
+	// then create layer
+	var layer = new Konva.Layer();
+
+	// create our shape
+	var circle = new Konva.Circle({
+	  x: stage.width() / 2,
+	  y: stage.height() / 2,
+	  radius: 70,
+	  fill: 'red',
+	  stroke: 'black',
+	  strokeWidth: 4
+	});
+
+	// add the shape to the layer
+	layer.add(circle);
+
+	// add the layer to the stage
+	stage.add(layer);
+
+	// draw the image
+	layer.draw();
+}
+</script>
+</html>
